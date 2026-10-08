@@ -1,0 +1,57 @@
+{
+  "schemaVersion": "1",
+  "name": "@nuxt4-layers/authorisation",
+  "version": "0.1.0",
+  "classification": "foundation",
+  "provides": [
+    {
+      "capability": "Authorisation",
+      "contractVersion": "1"
+    }
+  ],
+  "requires": [
+    {
+      "capability": "Authentication",
+      "contractVersion": "1",
+      "optional": false,
+      "purpose": "the subject of every decision is an AuthenticatedPrincipal; the host passes it in, so there is no package dependency"
+    },
+    {
+      "capability": "Identity",
+      "contractVersion": "1",
+      "optional": false,
+      "purpose": "groups, lineage and current memberships, adapted by the host to the AuthorisationDirectory port"
+    }
+  ],
+  "publicExports": [
+    ".",
+    "./contracts",
+    "./capability"
+  ],
+  "ports": [
+    {
+      "port": "AuthorisationDatabase",
+      "optional": false
+    },
+    {
+      "port": "AuthorisationDirectory",
+      "optional": false
+    },
+    {
+      "port": "AuthorisationEventSink",
+      "optional": true
+    },
+    {
+      "port": "AuthorisationPermissions",
+      "optional": false
+    },
+    {
+      "port": "AuthorisationPolicy",
+      "optional": true
+    }
+  ],
+  "integration": {
+    "consumers": "domain capabilities describe their resources and ask for decisions through the public contract; they never read the authorisation schema",
+    "composition": "host supplies ports from a Nitro plugin; persistence follows ADR-0002; groups and memberships belong to Identity"
+  }
+}
