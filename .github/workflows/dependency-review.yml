@@ -23,4 +23,5 @@ jobs:
           # Accepted risk, development tooling only (docs/threat-model.md §4):
           # simple-git 3.x via nuxt -> @nuxt/devtools; no patched 3.x exists and
           # 4.x breaks devtools. Remove when devtools moves off simple-git 3.x.
-          allow-ghsas: GHSA-x6jw-m9v5-85vh, GHSA-858h-whjf-mvg5, GHSA-g4wm-2vf7-vfgr
+          # braces 3.0.3 via nitropack -> globby -> micromatch (build-time globs, no patched release).
+          allow-ghsas: GHSA-x6jw-m9v5-85vh, GHSA-858h-whjf-mvg5, GHSA-g4wm-2vf7-vfgr, GHSA-vfj7-8cjw-p6xm
