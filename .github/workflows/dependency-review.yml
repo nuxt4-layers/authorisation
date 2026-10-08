@@ -19,6 +19,9 @@ jobs:
           fail-on-severity: moderate
           # Licences compatible with distributing an MIT-licensed layer.
           deny-licenses: GPL-2.0-only, GPL-2.0-or-later, GPL-3.0-only, GPL-3.0-or-later, AGPL-3.0-only, AGPL-3.0-or-later
+          # node-forge is dual-licensed "BSD-3-Clause OR GPL-2.0-only"; it is used
+          # under BSD-3-Clause, so the GPL alternative does not apply.
+          allow-dependencies-licenses: pkg:npm/node-forge
           comment-summary-in-pr: never
           # Accepted risk, development tooling only (docs/threat-model.md §4):
           # simple-git 3.x via nuxt -> @nuxt/devtools; no patched 3.x exists and
