@@ -11,7 +11,7 @@ import type { AuthorisationAssuranceRequirement } from './subject'
 /** What allowed the permission. */
 export type AuthorisationGrantSource =
   | 'role'
-  | 'resource-owner'
+  | 'personal-group'
   | 'grant'
 
 /**
@@ -20,7 +20,9 @@ export type AuthorisationGrantSource =
  * - `unknown-permission` — not in the catalogue (fails closed).
  * - `unknown-subject` — the directory does not know the principal.
  * - `unknown-group` — the directory does not know the resource's owning group.
- * - `not-permitted` — no role, ownership or grant covers it.
+ * - `tenant-mismatch` — the resource belongs to a different tenant from the
+ *   request's tenant context.
+ * - `not-permitted` — no role, personal-group role or grant covers it.
  * - `insufficient-assurance` — permitted, but the session must step up or
  *   re-authenticate first; `requirement` says how.
  */
@@ -28,6 +30,7 @@ export type AuthorisationDenialReason =
   | 'unknown-permission'
   | 'unknown-subject'
   | 'unknown-group'
+  | 'tenant-mismatch'
   | 'not-permitted'
   | 'insufficient-assurance'
 

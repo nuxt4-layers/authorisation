@@ -24,8 +24,8 @@
 | ID | Threat | Control | Evidence | Status |
 |---|---|---|---|---|
 | T1 | Access granted by default or by an unanticipated path | Deny by default; unknown permission, principal or group refused (V8) | `tests/decision.test.ts` "deny by default" | Implemented |
-| T2 | Cross-tenant access | A role applies only on its group's lineage; lineage comes from the directory, never the client; no superuser (V8) | "tenant isolation" tests | Implemented |
-| T3 | Access kept after leaving a group | Roles and resource ownership require current membership; grants stay inside the resource's tenant by default | "leaving a group ends access" tests | Implemented |
+| T2 | Cross-tenant access | Tenant supplied by the directory, never the client; separate `tenant-mismatch` check against the server-resolved request tenant; roles, custom roles and grants confined to the resource's tenant; no superuser (V8) | "tenant isolation" decision tests | Implemented |
+| T3 | Access kept after leaving a group | Only `active` memberships count; roles and principal grants require them; creator provenance grants nothing; grants stay inside the resource's tenant by default | "membership status and departure", "creator provenance" tests | Implemented |
 | T4 | Privilege escalation through broad wildcards | Wildcards never cover high or critical permissions; a role naming an unknown permission is refused at startup | decision and composition tests | Implemented |
 | T5 | Typos that silently grant nothing or everything | Permission and pattern grammar; catalogue membership required | `tests/permissions.test.ts` | Implemented |
 | T6 | Sensitive operations from a weak or stale session | Risk level maps to assurance; floors in the policy (V8) | policy and decision tests | Implemented |
@@ -35,10 +35,11 @@
 | T10 | Supply-chain compromise | Minimal dependencies (`zod`); `minimumReleaseAge`, `blockExoticSubdeps`, frozen lockfile, dependency review (development-only exceptions recorded in §4) | `pnpm-workspace.yaml`, workflows | Implemented |
 | T11 | Unauthorised change to roles, assignments or grants | The layer's own `authorisation.*` permissions, critical risk for assignments and roles | — | Phase 2 |
 | T12 | Last owner removed, locking a group out | Refuse removing the last owner | — | Phase 2 |
-| T13 | Stale membership from a caching directory adapter | Contract requires current data; caches expire within seconds | `docs/composition-contract.md` | Host responsibility |
+| T13 | Stale membership from a caching directory adapter | Consistency levels in the port: `strong` (no cache) for high and critical permissions, `bounded` (≤ 30 s) otherwise; directory failure fails closed; decisions never cached or embedded in sessions | `shared/ports.ts`, `docs/contracts.md` §10 | Contract implemented; enforcement phase 2 |
 | T14 | Policy changes not auditable | Events for every role, assignment and grant change, and denials (V16) | Event contract | Contract implemented; emission phase 2 |
 | T15 | Personal data in logs and events | Events carry opaque IDs only | `shared/events.ts` | Implemented |
 | T16 | Prototype or path traversal through conditions | Conditions read own properties of `resource.attributes` only | decision tests | Implemented |
+| T17 | Privilege gained through the group hierarchy, e.g. by reparenting a group under one whose admins should not see it | The hierarchy confers nothing by default; inheritance only through an explicit `group-and-descendants` assignment, which follows the current tree; assigning that scope is a critical operation | "the hierarchy confers no privilege by default" tests | Implemented (engine); permission checks on assignment phase 2 |
 
 ## 4. Deferred controls and risk treatments
 

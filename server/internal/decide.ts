@@ -6,7 +6,7 @@ import type {
   AuthorisationDenialReason,
   AuthorisationGrant,
   AuthorisationGrantSource,
-  AuthorisationGroupLineage,
+  AuthorisationGroup,
   AuthorisationPermissionCatalogue,
   AuthorisationPermissionDefinition,
   AuthorisationPolicy,
@@ -26,17 +26,20 @@ import { BUILT_IN_ROLE_IDS, permissionPatternMatches } from '../../contracts'
  * Rules, in order (docs/contracts.md, "How a decision is made"):
  *
  * 1. Deny by default. An unknown permission, principal or group is refused.
- * 2. A role assignment counts only while the principal is a current member of
- *    the group it was made in, and only for resources owned by that group or
- *    its descendants. Tenants are therefore isolated by construction.
- * 3. Every principal is the owner of their personal group.
- * 4. A resource's owner holds the resource-owner role on it while they are a
- *    member of a group in the resource's lineage.
- * 5. A grant counts until it expires. A grant to a principal outside the
- *    resource's tenant, or to a group in another tenant (including someone's
- *    personal group), counts only if the policy allows external grants.
- * 6. Wildcards never cover `high` or `critical` permissions.
- * 7. A permitted action still needs the session assurance its risk demands.
+ * 2. Tenant isolation is its own check: a resource outside the request's
+ *    tenant context is refused before any role or grant is considered.
+ * 3. Only `active` memberships count. A role assignment counts only while the
+ *    principal is an active member of the group it was made in, and only in
+ *    that group's tenant.
+ * 4. The hierarchy confers nothing by default. An assignment covers the
+ *    resource's own group; it reaches descendants only with the explicit
+ *    `group-and-descendants` scope.
+ * 5. A principal holds the policy's personal-group role in their own personal
+ *    group. Creator provenance never grants access by itself.
+ * 6. A grant counts until it expires, and stays inside the resource's tenant
+ *    unless the policy allows external grants.
+ * 7. Wildcards never cover `high` or `critical` permissions.
+ * 8. A permitted action still needs the session assurance its risk demands.
  */
 
 export interface AuthorisationFacts {
@@ -45,11 +48,17 @@ export interface AuthorisationFacts {
   actor: AuthorisationActorContext | null
   permission: string
   resource: AuthorisationResource
-  /** From the directory; null when it does not know the owning group. */
-  resourceLineage: AuthorisationGroupLineage | null
+  /** The resource's owning group, from the directory; null when unknown. */
+  owningGroup: AuthorisationGroup | null
+  /**
+   * The tenant the request is made in, resolved on the server (e.g. from the
+   * route the host serves). Never taken from client input. Null when the
+   * operation is not tenant-scoped.
+   */
+  requestTenantId: string | null
   /** The subject's role assignments (others' are ignored). */
   assignments: readonly AuthorisationRoleAssignment[]
-  /** Custom roles, keyed by tenant root group, then role ID. */
+  /** Custom roles, keyed by tenant ID, then role ID. */
   customRoles: ReadonlyMap<string, ReadonlyMap<string, AuthorisationRoleDefinition>>
   /** Grants on the resource (grants on other resources are ignored). */
   grants: readonly AuthorisationGrant[]
@@ -62,16 +71,19 @@ const WILDCARD_RISKS = new Set(['low', 'medium'])
 const LEVEL_RANK = { aal1: 1, aal2: 2 } as const
 
 export function decideAuthorisation(facts: AuthorisationFacts): AuthorisationDecision {
-  const { subject, actor, permission, resource, resourceLineage: lineage } = facts
+  const { subject, actor, permission, resource, owningGroup: group } = facts
   const deny = (reason: AuthorisationDenialReason): AuthorisationDecision =>
     ({ allowed: false, permission, reason, requirement: null })
 
   const definition = facts.catalogue.get(permission)
   if (!definition || !permission.startsWith(`${resource.type}:`)) return deny('unknown-permission')
   if (!actor || actor.principalId !== subject.principalId) return deny('unknown-subject')
-  if (!lineage?.length || lineage.at(-1) !== resource.owningGroupId) return deny('unknown-group')
+  if (!group || group.groupId !== resource.owningGroupId || group.lineage.at(-1) !== group.groupId || !group.tenantId) {
+    return deny('unknown-group')
+  }
+  if (facts.requestTenantId !== null && facts.requestTenantId !== group.tenantId) return deny('tenant-mismatch')
 
-  const via = findSource(facts, actor, lineage, definition)
+  const via = findSource(facts, actor, group, definition)
   if (!via) return deny('not-permitted')
 
   const requirement = facts.policy.assurance[definition.risk]
@@ -84,44 +96,45 @@ export function decideAuthorisation(facts: AuthorisationFacts): AuthorisationDec
 function findSource(
   facts: AuthorisationFacts,
   actor: AuthorisationActorContext,
-  lineage: AuthorisationGroupLineage,
+  group: AuthorisationGroup,
   definition: AuthorisationPermissionDefinition,
 ): AuthorisationGrantSource | null {
   const { subject, resource, policy } = facts
-  const tenantRoot = lineage[0]!
-  const memberOf = new Set([actor.personalGroupId, ...actor.memberships.map(m => m.groupId)])
-  const tenantOf = new Map<string, string | undefined>([
-    [actor.personalGroupId, actor.personalGroupId],
-    ...actor.memberships.map(m => [m.groupId, m.lineage[0]] as const),
-  ])
-  const inTenant = new Set(tenantOf.values()).has(tenantRoot)
   const covers = (role: AuthorisationRoleDefinition | undefined) =>
     !!role && role.permissions.some(entry => entryCovers(entry, definition, facts))
 
-  // Roles held in a group on the resource's lineage, while still a member of it.
+  // Active memberships, and the tenant of each group the principal belongs to.
+  const tenantOf = new Map<string, string>()
+  for (const { group: member, status } of actor.memberships) {
+    if (status === 'active') tenantOf.set(member.groupId, member.tenantId)
+  }
+  if (actor.personalGroup) tenantOf.set(actor.personalGroup.groupId, actor.personalGroup.tenantId)
+  const inResourceTenant = (groupId: string) => tenantOf.get(groupId) === group.tenantId
+
+  // Roles held in the owning group, or in an ancestor when explicitly scoped to descendants.
   const heldRoles = facts.assignments
-    .filter(a => a.principalId === subject.principalId && lineage.includes(a.groupId) && memberOf.has(a.groupId))
-    .map(a => findRole(a.roleId, tenantRoot, facts))
-  if (lineage.length === 1 && tenantRoot === actor.personalGroupId) heldRoles.push(builtInRole('owner', policy))
+    .filter(a => a.principalId === subject.principalId && inResourceTenant(a.groupId))
+    .filter(a => a.groupId === group.groupId || (a.scope === 'group-and-descendants' && group.lineage.includes(a.groupId)))
+    .map(a => findRole(a.roleId, group.tenantId, facts))
   if (heldRoles.some(covers)) return 'role'
 
-  // The resource's owner, while still a member somewhere on its lineage.
-  if (resource.ownerPrincipalId === subject.principalId && lineage.some(group => memberOf.has(group))) {
-    if (covers(builtInRole(policy.resourceOwnerRole, policy))) return 'resource-owner'
+  // The principal's own personal group.
+  if (actor.personalGroup?.groupId === group.groupId && policy.personalGroupRole) {
+    if (covers(builtInRole(policy.personalGroupRole, policy))) return 'personal-group'
   }
 
-  // Grants on this resource.
+  // Grants on this resource, inside its tenant unless external grants are allowed.
   const now = facts.now.getTime()
   const granted = facts.grants.some((grant) => {
     if (grant.resource.type !== resource.type || grant.resource.id !== resource.id) return false
     if (!grant.permissions.includes(definition.name)) return false
     if (grant.expiresAt !== null && !(Date.parse(grant.expiresAt) > now)) return false
-    // Information stays in its tenant unless the host allows external grants.
     if (grant.subject.kind === 'group') {
-      return memberOf.has(grant.subject.groupId)
-        && (policy.externalGrants || tenantOf.get(grant.subject.groupId) === tenantRoot)
+      const groupId = grant.subject.groupId
+      return tenantOf.has(groupId) && (policy.externalGrants || inResourceTenant(groupId))
     }
-    return grant.subject.principalId === subject.principalId && (policy.externalGrants || inTenant)
+    return grant.subject.principalId === subject.principalId
+      && (policy.externalGrants || [...tenantOf.values()].includes(group.tenantId))
   })
   return granted ? 'grant' : null
 }
@@ -130,9 +143,9 @@ function builtInRole(id: BuiltInRoleId, policy: AuthorisationPolicy): Authorisat
   return { id, name: id, permissions: [...policy.roles[id]] }
 }
 
-function findRole(roleId: string, tenantRoot: string, facts: AuthorisationFacts): AuthorisationRoleDefinition | undefined {
+function findRole(roleId: string, tenantId: string, facts: AuthorisationFacts): AuthorisationRoleDefinition | undefined {
   if ((BUILT_IN_ROLE_IDS as readonly string[]).includes(roleId)) return builtInRole(roleId as BuiltInRoleId, facts.policy)
-  return facts.customRoles.get(tenantRoot)?.get(roleId)
+  return facts.customRoles.get(tenantId)?.get(roleId)
 }
 
 function entryCovers(entry: AuthorisationRolePermission, definition: AuthorisationPermissionDefinition, facts: AuthorisationFacts): boolean {
@@ -144,8 +157,8 @@ function entryCovers(entry: AuthorisationRolePermission, definition: Authorisati
 function conditionHolds(condition: AuthorisationCondition, facts: AuthorisationFacts): boolean {
   const { resource, subject } = facts
   let actual: unknown
-  if (condition.attribute === 'resource.ownerPrincipalId') {
-    actual = resource.ownerPrincipalId
+  if (condition.attribute === 'resource.creatorPrincipalId') {
+    actual = resource.creatorPrincipalId
   }
   else {
     const key = condition.attribute.slice('resource.attributes.'.length)

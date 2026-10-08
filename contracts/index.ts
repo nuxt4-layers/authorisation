@@ -46,11 +46,14 @@ export {
 export type {
   AuthorisationActorContext,
   AuthorisationAttributeValue,
+  AuthorisationGroup,
   AuthorisationGroupLineage,
   AuthorisationMembership,
+  AuthorisationMembershipStatus,
   AuthorisationResource,
   AuthorisationResourceRef,
 } from '../shared/resources'
+export { AUTHORISATION_MEMBERSHIP_STATUSES } from '../shared/resources'
 
 // ---------------------------------------------------------------------------
 // Roles, assignments, grants and conditions
@@ -62,6 +65,7 @@ export type {
   AuthorisationGrant,
   AuthorisationGrantSubject,
   AuthorisationRoleAssignment,
+  AuthorisationRoleAssignmentScope,
   AuthorisationRoleDefinition,
   AuthorisationRolePermission,
   BuiltInRoleId,
@@ -70,6 +74,7 @@ export {
   BUILT_IN_ROLE_IDS,
   CONDITION_OPERATORS,
   conditionSchema,
+  ROLE_ASSIGNMENT_SCOPES,
   roleDefinitionSchema,
   rolePermissionSchema,
 } from '../shared/roles'
@@ -117,6 +122,9 @@ export { DEFAULT_AUTHORISATION_POLICY, resolveAuthorisationPolicy } from '../sha
 export type {
   AuthorisationDatabase,
   AuthorisationDirectory,
+  AuthorisationDirectoryConsistency,
+  AuthorisationDirectoryReadOptions,
   AuthorisationEventSink,
   PostgresPoolLike,
 } from '../shared/ports'
+export { AUTHORISATION_MAX_STALENESS_SECONDS } from '../shared/ports'

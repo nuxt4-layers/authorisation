@@ -15,8 +15,12 @@ export interface AuthorisationPolicy {
   assurance: Readonly<Record<AuthorisationRiskLevel, AuthorisationAssuranceRequirement>>
   /** Permissions of the built-in roles. */
   roles: Readonly<Record<BuiltInRoleId, readonly AuthorisationRolePermission[]>>
-  /** The built-in role a resource's owner holds on that resource. */
-  resourceOwnerRole: BuiltInRoleId
+  /**
+   * The built-in role every principal holds in their own personal group, or
+   * null for none. A personal group has exactly one member, so this decides
+   * what users may do with the resources they keep for themselves.
+   */
+  personalGroupRole: BuiltInRoleId | null
   /**
    * Whether a grant takes effect outside the resource's tenant: to a principal
    * who is not a member of it, or to a group in another tenant (including a
@@ -50,7 +54,7 @@ export const DEFAULT_AUTHORISATION_POLICY: AuthorisationPolicy = Object.freeze({
     member: [{ pattern: '*:view' }, { pattern: '*:create' }],
     viewer: [{ pattern: '*:view' }],
   }),
-  resourceOwnerRole: 'owner',
+  personalGroupRole: 'owner',
   externalGrants: false,
 })
 
@@ -78,7 +82,7 @@ const policyInputSchema = z.object({
     member: rolePermissions,
     viewer: rolePermissions,
   }).strict().optional(),
-  resourceOwnerRole: z.enum(BUILT_IN_ROLE_IDS).optional(),
+  personalGroupRole: z.enum(BUILT_IN_ROLE_IDS).nullable().optional(),
   externalGrants: z.boolean().optional(),
 }).strict()
 
@@ -125,7 +129,7 @@ export function resolveAuthorisationPolicy(input: AuthorisationPolicyInput = {})
   return Object.freeze({
     assurance: Object.freeze(assurance),
     roles: Object.freeze({ ...defaults.roles, ...parsed.roles }),
-    resourceOwnerRole: parsed.resourceOwnerRole ?? defaults.resourceOwnerRole,
+    personalGroupRole: parsed.personalGroupRole === undefined ? defaults.personalGroupRole : parsed.personalGroupRole,
     externalGrants: parsed.externalGrants ?? defaults.externalGrants,
   })
 }

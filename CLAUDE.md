@@ -13,8 +13,8 @@ Governed by `nuxt4-layers/platform-architecture`; persistence follows ADR-0002. 
 ## Rules
 - Contract (`contracts/`, `shared/`) imports only zod. No Nuxt, Vue, h3, server code, drivers or other `@nuxt4-layers/*` packages. Enforced by `tests/contracts.test.ts`.
 - Public surface: package root, `./contracts`, `./capability`, the `provide*` server functions. `server/internal` is private.
-- Authorisation stores no domain data, groups or memberships. Groups, lineage, memberships and personal groups come from Identity through the `AuthorisationDirectory` port. Authentication's principal is passed in structurally; never import either package.
-- Groups own information: a role, resource ownership or principal grant counts only while the principal is a current member (see docs/contracts.md §6). Keep the "leaving a group ends access" and tenant-isolation tests.
+- Authorisation stores no domain data, groups or memberships. Groups, lineage, tenants, memberships (with status) and personal groups come from Identity through the `AuthorisationDirectory` port. Follow platform-architecture's Group Model Definition. Authentication's principal is passed in structurally; never import either package.
+- Groups own information: a role or principal grant counts only while the principal is an active member (docs/contracts.md §5, §6). Creator provenance never grants access. The hierarchy confers no privilege unless an assignment is scoped `group-and-descendants`. Tenant isolation is a separate check. Keep the departure, no-implicit-inheritance and tenant-isolation tests.
 - Deny by default. Unknown permission, principal or group is refused. No superuser or bypass.
 - Wildcards never cover `high` or `critical` permissions.
 - Enforcement is server-side only. Any client API is a user-experience hint.

@@ -23,7 +23,7 @@ describe('Authorisation repository foundation', () => {
   })
 
   it('provides the Authorisation contract and requires Authentication and Identity by contract only', () => {
-    expect(manifest.provides).toEqual([{ capability: 'Authorisation', contractVersion: '1' }])
+    expect(manifest.provides).toEqual([{ capability: 'Authorisation', contractVersion: '2' }])
     expect(manifest.requires.map((r: { capability: string }) => r.capability)).toEqual(['Authentication', 'Identity'])
     expect(Object.keys(pkg.dependencies ?? {}).filter(name => name.startsWith('@nuxt4-layers/'))).toEqual([])
   })

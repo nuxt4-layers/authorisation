@@ -6,10 +6,11 @@ import { isPermissionPattern } from './permissions'
  * contract.
  *
  * A role is a named set of permission patterns. A role assignment gives a
- * principal a role in a group; it takes effect for resources owned by that
- * group and by its descendants, and only while the principal is a current
- * member of the group. A grant gives a principal or a group permissions on
- * one resource.
+ * principal a role in a group; it takes effect only while the principal is an
+ * active member of that group, and only in that group's tenant. By default it
+ * covers resources owned by that group alone: the group hierarchy confers no
+ * privilege unless the assignment explicitly asks for its descendants. A grant
+ * gives a principal or a group permissions on one resource.
  */
 
 const IDENTIFIER = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/
@@ -24,13 +25,13 @@ const scalar = z.union([z.string().max(256), z.number().finite(), z.boolean(), z
 
 /**
  * A test on the resource, evaluated at decision time. `attribute` names a key
- * of `resource.attributes`, or `resource.ownerPrincipalId`.
+ * of `resource.attributes`, or `resource.creatorPrincipalId`.
  *
  * `value` is a literal, or `{ ref: 'subject.principalId' }` to compare with
  * the asking principal. A missing attribute never satisfies a condition.
  */
 export const conditionSchema = z.object({
-  attribute: z.string().regex(/^(?:resource\.ownerPrincipalId|resource\.attributes\.[a-zA-Z][a-zA-Z0-9_]{0,63})$/),
+  attribute: z.string().regex(/^(?:resource\.creatorPrincipalId|resource\.attributes\.[a-zA-Z][a-zA-Z0-9_]{0,63})$/),
   operator: z.enum(CONDITION_OPERATORS),
   value: z.union([
     scalar,
@@ -63,11 +64,24 @@ export const roleDefinitionSchema = z.object({
 
 export type AuthorisationRoleDefinition = z.infer<typeof roleDefinitionSchema>
 
+/**
+ * How far a role assignment reaches down the group hierarchy.
+ *
+ * - `group` — resources owned by the group itself. The default.
+ * - `group-and-descendants` — also resources owned by groups below it, as an
+ *   explicit, auditable choice. Moving a group elsewhere in the tree changes
+ *   what such an assignment covers, so assigning this scope is a critical
+ *   operation.
+ */
+export const ROLE_ASSIGNMENT_SCOPES = ['group', 'group-and-descendants'] as const
+export type AuthorisationRoleAssignmentScope = typeof ROLE_ASSIGNMENT_SCOPES[number]
+
 /** A role held by a principal in a group. */
 export interface AuthorisationRoleAssignment {
   principalId: string
   groupId: string
   roleId: string
+  scope: AuthorisationRoleAssignmentScope
 }
 
 export type AuthorisationGrantSubject =

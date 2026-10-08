@@ -1,12 +1,12 @@
 {
   "schemaVersion": "1",
   "name": "@nuxt4-layers/authorisation",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "classification": "foundation",
   "provides": [
     {
       "capability": "Authorisation",
-      "contractVersion": "1"
+      "contractVersion": "2"
     }
   ],
   "requires": [
@@ -20,7 +20,7 @@
       "capability": "Identity",
       "contractVersion": "1",
       "optional": false,
-      "purpose": "groups, lineage and current memberships, adapted by the host to the AuthorisationDirectory port"
+      "purpose": "groups, lineage, tenants and membership status, adapted by the host to the AuthorisationDirectory port"
     }
   ],
   "publicExports": [

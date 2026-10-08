@@ -1,5 +1,5 @@
 import type { AuthorisationEvent } from './events'
-import type { AuthorisationActorContext, AuthorisationGroupLineage } from './resources'
+import type { AuthorisationActorContext, AuthorisationGroup } from './resources'
 
 /**
  * Structural shape of a PostgreSQL connection pool, as provided by the `pg`
@@ -25,19 +25,37 @@ export interface AuthorisationDatabase {
 }
 
 /**
- * Directory port: groups and memberships, which Identity owns. The host
- * adapts Identity's public contract (or, until Identity exists, its own
+ * How fresh a directory answer must be. Ending a membership must end the
+ * access derived from it (docs/contracts.md, "Revocation").
+ *
+ * - `strong` — read from the source of truth; no cache. Used for `high` and
+ *   `critical` permissions.
+ * - `bounded` — may come from a cache no older than
+ *   `AUTHORISATION_MAX_STALENESS_SECONDS`. Used for `low` and `medium`.
+ */
+export type AuthorisationDirectoryConsistency = 'strong' | 'bounded'
+
+/** Upper bound on the age of a `bounded` directory answer. */
+export const AUTHORISATION_MAX_STALENESS_SECONDS = 30
+
+export interface AuthorisationDirectoryReadOptions {
+  consistency: AuthorisationDirectoryConsistency
+}
+
+/**
+ * Directory port: groups, tenants and memberships, which Identity owns. The
+ * host adapts Identity's public contract (or, until Identity exists, its own
  * store) to this shape.
  *
- * Both methods answer from current data on every call. An adapter that
- * caches must expire entries quickly, because leaving a group must end
- * access promptly (docs/threat-model.md).
+ * Both methods must honour `options.consistency`. A failure must reject (the
+ * decision then fails closed); it must never answer with partial data, or
+ * with data older than the requested consistency allows.
  */
 export interface AuthorisationDirectory {
-  /** The principal's personal group and current memberships, or null if unknown. */
-  resolveActor(principalId: string): Promise<AuthorisationActorContext | null>
-  /** The group's lineage from its tenant root, or null if the group is unknown. */
-  getGroupLineage(groupId: string): Promise<AuthorisationGroupLineage | null>
+  /** The principal's personal group and memberships with their status, or null if unknown. */
+  resolveActor(principalId: string, options: AuthorisationDirectoryReadOptions): Promise<AuthorisationActorContext | null>
+  /** The group's lineage and tenant, or null if the group is unknown. */
+  describeGroup(groupId: string, options: AuthorisationDirectoryReadOptions): Promise<AuthorisationGroup | null>
 }
 
 /**
