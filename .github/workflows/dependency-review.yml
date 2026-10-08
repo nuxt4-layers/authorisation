@@ -20,3 +20,7 @@ jobs:
           # Licences compatible with distributing an MIT-licensed layer.
           deny-licenses: GPL-2.0-only, GPL-2.0-or-later, GPL-3.0-only, GPL-3.0-or-later, AGPL-3.0-only, AGPL-3.0-or-later
           comment-summary-in-pr: never
+          # Accepted risk, development tooling only (docs/threat-model.md §4):
+          # simple-git 3.x via nuxt -> @nuxt/devtools; no patched 3.x exists and
+          # 4.x breaks devtools. Remove when devtools moves off simple-git 3.x.
+          allow-ghsas: GHSA-x6jw-m9v5-85vh, GHSA-858h-whjf-mvg5, GHSA-g4wm-2vf7-vfgr
