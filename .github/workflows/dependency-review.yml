@@ -24,4 +24,5 @@ jobs:
           # simple-git 3.x via nuxt -> @nuxt/devtools; no patched 3.x exists and
           # 4.x breaks devtools. Remove when devtools moves off simple-git 3.x.
           # braces 3.0.3 via nitropack -> globby -> micromatch (build-time globs, no patched release).
-          allow-ghsas: GHSA-x6jw-m9v5-85vh, GHSA-858h-whjf-mvg5, GHSA-g4wm-2vf7-vfgr, GHSA-vfj7-8cjw-p6xm
+          # node-forge 1.4.0 via nitropack -> listhen (dev HTTPS certificate generation only, no patched release).
+          allow-ghsas: GHSA-x6jw-m9v5-85vh, GHSA-858h-whjf-mvg5, GHSA-g4wm-2vf7-vfgr, GHSA-vfj7-8cjw-p6xm, GHSA-86w9-cpqp-85rv
