@@ -32,7 +32,7 @@
 | T7 | Decision reveals existence of resources or groups | Coarse HTTP error codes; detailed reasons stay server-side (V8) | `tests/contracts.test.ts` | Implemented |
 | T8 | Client-side enforcement relied on | No client decision API; enforcement is server-only (V8) | Architecture | Implemented |
 | T9 | Missing port leads to an implicit permissive store | Required ports fail closed (ADR-0002) | `tests/composition.test.ts` | Implemented |
-| T10 | Supply-chain compromise | Minimal dependencies (`zod`); `minimumReleaseAge`, `blockExoticSubdeps`, frozen lockfile, dependency review | `pnpm-workspace.yaml`, workflows | Implemented |
+| T10 | Supply-chain compromise | Minimal dependencies (`zod`); `minimumReleaseAge`, `blockExoticSubdeps`, frozen lockfile, dependency review (development-only exceptions recorded in §4) | `pnpm-workspace.yaml`, workflows | Implemented |
 | T11 | Unauthorised change to roles, assignments or grants | The layer's own `authorisation.*` permissions, critical risk for assignments and roles | — | Phase 2 |
 | T12 | Last owner removed, locking a group out | Refuse removing the last owner | — | Phase 2 |
 | T13 | Stale membership from a caching directory adapter | Contract requires current data; caches expire within seconds | `docs/composition-contract.md` | Host responsibility |
@@ -47,3 +47,4 @@
 | No storage, endpoints or administration yet | Hosts cannot yet manage roles at runtime | Phase 2 and 3 |
 | No Identity layer exists | Hosts must write their own directory adapter | Contract defined; Identity to follow |
 | Phishing-resistant requirement for `critical` can be turned off | Critical operations from phishable sessions | Allowed only with a documented host risk treatment |
+| `simple-git` 3.36.0 advisories GHSA-x6jw-m9v5-85vh (critical), GHSA-858h-whjf-mvg5 and GHSA-g4wm-2vf7-vfgr (high), allow-listed in `dependency-review.yml` | Command execution if an attacker controls `simple-git` arguments or Git configuration | Accepted 2026-10-08, review by 2027-01-08. Reached only through `nuxt` → `@nuxt/devtools` (a devDependency, never installed into hosts); devtools passes fixed arguments (`branch`, `revparse --short HEAD`, `status`) on the local checkout in `nuxt dev` only. No patched 3.x exists, and `simple-git` 4.x drops the default export devtools imports. Remove the allow-list once devtools depends on a patched `simple-git`. |
