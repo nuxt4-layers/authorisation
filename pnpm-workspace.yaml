@@ -1,0 +1,7 @@
+# Supply-chain hardening (docs/threat-model.md T10).
+# Resolve only versions published at least a day ago; most malicious releases
+# are detected and pulled within hours.
+minimumReleaseAge: 1440
+# Transitive dependencies may come only from the registry, never from Git or
+# tarball URLs.
+blockExoticSubdeps: true
