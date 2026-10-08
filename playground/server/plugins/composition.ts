@@ -3,11 +3,11 @@
  * application would. The directory here is a fixed development fixture standing
  * in for the host's Identity adapter; the database port is added in phase 2.
  */
-const lineage: Record<string, string[]> = {
-  'company-a': ['company-a'],
-  'company-a-sales': ['company-a', 'company-a-sales'],
-  'personal-alice': ['personal-alice'],
-}
+const groups = {
+  'company-a': { groupId: 'company-a', lineage: ['company-a'], tenantId: 'tenant-a' },
+  'company-a-sales': { groupId: 'company-a-sales', lineage: ['company-a', 'company-a-sales'], tenantId: 'tenant-a' },
+  'personal-alice': { groupId: 'personal-alice', lineage: ['personal-alice'], tenantId: 'personal-alice' },
+} as const
 
 export default defineNitroPlugin(() => {
   provideAuthorisationDirectory({
@@ -15,12 +15,12 @@ export default defineNitroPlugin(() => {
       if (principalId !== 'alice') return null
       return {
         principalId,
-        personalGroupId: 'personal-alice',
-        memberships: [{ groupId: 'company-a-sales', lineage: lineage['company-a-sales']! }],
+        personalGroup: groups['personal-alice'],
+        memberships: [{ group: groups['company-a-sales'], status: 'active' }],
       }
     },
-    async getGroupLineage(groupId) {
-      return lineage[groupId] ?? null
+    async describeGroup(groupId) {
+      return groups[groupId as keyof typeof groups] ?? null
     },
   })
 

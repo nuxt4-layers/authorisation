@@ -45,8 +45,8 @@ export function provideAuthorisationDatabase(next: AuthorisationDatabase): void 
 }
 
 export function provideAuthorisationDirectory(next: AuthorisationDirectory): void {
-  if (typeof next?.resolveActor !== 'function' || typeof next.getGroupLineage !== 'function') {
-    throw new TypeError('provideAuthorisationDirectory expects an object with resolveActor(principalId) and getGroupLineage(groupId) functions.')
+  if (typeof next?.resolveActor !== 'function' || typeof next.describeGroup !== 'function') {
+    throw new TypeError('provideAuthorisationDirectory expects an object with resolveActor(principalId, options) and describeGroup(groupId, options) functions.')
   }
   directory = next
 }

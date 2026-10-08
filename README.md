@@ -10,10 +10,10 @@ A Nuxt 4 foundation layer that decides whether a signed-in principal may perform
 subject + permission + resource + group context + roles + grants -> decision
 ```
 
-- **Groups own information.** Every resource belongs to one group: an organisation, company, club, committee, event, department and so on. Groups nest; the root of a group's lineage is its tenant, the isolation boundary.
-- **Every identity has a personal group**, a unary group like a Unix user's own group, for the things a user keeps to themselves.
-- **Roles are held in groups** and reach that group's descendants, never its ancestors, siblings or other tenants, and only while the holder is a member.
-- **Leaving a group ends access to everything in it**, including what the leaver created. Joining one gives access up to the roles held there.
+- **Groups own information.** Every resource belongs to one group: an organisation, company, club, committee, event, department and so on. Each group has at most one parent. Tenants are a separate isolation boundary, checked on their own.
+- **Every human identity has a personal group**, a unary group like a Unix user's own group, for the things a user keeps to themselves.
+- **Roles are held in groups** and count only while the holder is an active member. The hierarchy confers nothing by default: a role reaches child groups only when its assignment explicitly says so.
+- **Leaving a group ends the access it gave**, including to what the leaver created: creating something is provenance, not ownership. Joining one gives access up to the roles held there.
 - **Grants** share one resource with another principal or group.
 - **Risk levels** demand stronger authentication: `high` needs AAL2, `critical` a recent, phishing-resistant sign-in.
 - Deny by default. No superuser. Enforcement is on the server only.

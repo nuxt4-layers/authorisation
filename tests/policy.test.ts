@@ -6,8 +6,14 @@ describe('Authorisation policy', () => {
     expect(resolveAuthorisationPolicy()).toEqual(DEFAULT_AUTHORISATION_POLICY)
   })
 
-  it('keeps information inside its group by default', () => {
+  it('keeps information inside its tenant by default', () => {
     expect(DEFAULT_AUTHORISATION_POLICY.externalGrants).toBe(false)
+  })
+
+  it('makes personal-group rights an explicit, configurable setting', () => {
+    expect(DEFAULT_AUTHORISATION_POLICY.personalGroupRole).toBe('owner')
+    expect(resolveAuthorisationPolicy({ personalGroupRole: null }).personalGroupRole).toBeNull()
+    expect(() => resolveAuthorisationPolicy({ personalGroupRole: 'superuser' } as never)).toThrow()
   })
 
   it('accepts tightening', () => {

@@ -1,11 +1,11 @@
 /**
- * Resources and groups as Authorisation sees them. Re-exported from the
- * public contract.
+ * Resources, groups and tenants as Authorisation sees them. Re-exported from
+ * the public contract.
  *
  * Authorisation stores no domain data and no groups. The domain capability
  * that owns a resource describes it with `AuthorisationResource`; Identity
- * (through the host's `AuthorisationDirectory` adapter) describes groups and
- * memberships.
+ * (through the host's `AuthorisationDirectory` adapter) describes groups,
+ * tenants and memberships.
  */
 
 /** A value a condition can compare. */
@@ -27,11 +27,11 @@ export interface AuthorisationResource {
    */
   owningGroupId: string
   /**
-   * The principal who created or is responsible for the resource, if any.
-   * They receive the resource-owner role only while they remain a member of
-   * the owning group (or its tenant), so leaving a group ends their access.
+   * Creator provenance: who created the resource. It never grants access by
+   * itself; a role may test it in a condition (e.g. "members may edit what
+   * they created"), and that role still needs a current membership.
    */
-  ownerPrincipalId?: string | null
+  creatorPrincipalId?: string | null
   /** Attributes that role conditions may test, e.g. `{ status: 'draft' }`. */
   attributes?: Readonly<Record<string, AuthorisationAttributeValue>>
 }
@@ -43,28 +43,46 @@ export interface AuthorisationResourceRef {
 }
 
 /**
- * Where a group sits: its ancestors from the tenant root down to the group
- * itself, e.g. `['company-a', 'london-office', 'sales']`. The first entry is
- * the tenant root, the isolation boundary. A personal group is its own root.
+ * Where a group sits in its tree: its ancestors from the root down to the
+ * group itself, e.g. `['company-a', 'london-office', 'sales']`. Every group
+ * has at most one parent, so this is a single chain. Authorisation does not
+ * limit depth: that is Identity's rule.
  *
- * Authorisation does not limit depth: that is Identity's rule.
+ * The hierarchy records organisational structure only. It confers no
+ * privilege unless a role assignment explicitly asks for it.
  */
 export type AuthorisationGroupLineage = readonly string[]
 
-/** A group the principal currently belongs to, with its lineage. */
-export interface AuthorisationMembership {
+/**
+ * A group as the directory describes it. The tenant is the isolation
+ * boundary; it is supplied explicitly and is not assumed to be the root of
+ * the lineage.
+ */
+export interface AuthorisationGroup {
   groupId: string
   lineage: AuthorisationGroupLineage
+  tenantId: string
+}
+
+export const AUTHORISATION_MEMBERSHIP_STATUSES = ['active', 'suspended', 'ended'] as const
+export type AuthorisationMembershipStatus = typeof AUTHORISATION_MEMBERSHIP_STATUSES[number]
+
+/** A direct membership of the principal in a group. Only `active` ones count. */
+export interface AuthorisationMembership {
+  group: AuthorisationGroup
+  status: AuthorisationMembershipStatus
 }
 
 /**
  * The principal's group context, resolved by the host's directory adapter
- * for each decision. Only current memberships appear: a principal who has
- * left a group is simply absent from it.
+ * for each decision.
  */
 export interface AuthorisationActorContext {
   principalId: string
-  /** The principal's own unary group, created with their identity. */
-  personalGroupId: string
+  /**
+   * The principal's own unary group, created with a human identity. Null for
+   * identities that have none, such as non-human service identities.
+   */
+  personalGroup: AuthorisationGroup | null
   memberships: readonly AuthorisationMembership[]
 }

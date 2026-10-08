@@ -38,9 +38,10 @@ The host application:
 - selects a compatible version and pins it;
 - supplies a PostgreSQL pool through `provideAuthorisationDatabase` (required; used from phase 2);
 - supplies a directory through `provideAuthorisationDirectory` (required), adapting Identity's contract:
-  - `resolveActor(principalId)` returns the principal's personal group and **current** memberships, each with its group's lineage, or `null`;
-  - `getGroupLineage(groupId)` returns the lineage from the tenant root down to the group, or `null`;
-  - both answer from current data. A cache must expire within seconds, because leaving a group must end access promptly;
+  - `resolveActor(principalId, options)` returns the principal's personal group (or `null` for identities without one) and direct memberships, each with its group (lineage and tenant) and `status`, or `null` for an unknown principal;
+  - `describeGroup(groupId, options)` returns the group's lineage (root first, one parent per group) and its tenant, or `null`;
+  - both honour `options.consistency`: `strong` reads the source of truth with no cache; `bounded` may use a cache no older than `AUTHORISATION_MAX_STALENESS_SECONDS` (30 s). A failure must reject, never return stale or partial data (docs/contracts.md §10);
+  - the hierarchy it describes must not imply membership: a member of a parent group is not listed as a member of its children unless Identity's own versioned policy says so;
 - supplies every domain capability's permission definitions through `provideAuthorisationPermissions` (once per capability is fine);
 - optionally supplies an event sink and policy overrides;
 - passes the authenticated principal from Authentication as the subject of each decision;

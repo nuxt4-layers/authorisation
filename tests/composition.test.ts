@@ -16,7 +16,7 @@ import {
 } from '../server/utils/authorisation-composition'
 
 const pool = { query: vi.fn(), connect: vi.fn(), end: vi.fn() }
-const directory = { resolveActor: vi.fn(), getGroupLineage: vi.fn() }
+const directory = { resolveActor: vi.fn(), describeGroup: vi.fn() }
 
 const event: AuthorisationEvent = {
   type: 'authorisation.denied',

@@ -26,12 +26,15 @@ describe('Authorisation public contract', () => {
       'AUTHORISATION_ERROR_CODES',
       'AUTHORISATION_ERROR_STATUS',
       'AUTHORISATION_EVENT_TYPES',
+      'AUTHORISATION_MAX_STALENESS_SECONDS',
+      'AUTHORISATION_MEMBERSHIP_STATUSES',
       'AUTHORISATION_PERMISSIONS',
       'AUTHORISATION_RISK_LEVELS',
       'AuthorisationCompositionError',
       'BUILT_IN_ROLE_IDS',
       'CONDITION_OPERATORS',
       'DEFAULT_AUTHORISATION_POLICY',
+      'ROLE_ASSIGNMENT_SCOPES',
       'conditionSchema',
       'isAuthorisationErrorCode',
       'isPermissionName',
@@ -84,5 +87,15 @@ describe('Authorisation public contract', () => {
   it('does not grant platform-wide bypasses: no superuser role', () => {
     expect(contracts.BUILT_IN_ROLE_IDS).not.toContain('superuser')
     expect(JSON.stringify(contracts.DEFAULT_AUTHORISATION_POLICY)).not.toMatch(/superuser/)
+  })
+
+  it('makes hierarchy inheritance opt-in: the default assignment scope is the group alone', () => {
+    expect(contracts.ROLE_ASSIGNMENT_SCOPES[0]).toBe('group')
+    expect(contracts.ROLE_ASSIGNMENT_SCOPES).toEqual(['group', 'group-and-descendants'])
+  })
+
+  it('bounds directory staleness for revocation', () => {
+    expect(contracts.AUTHORISATION_MAX_STALENESS_SECONDS).toBeLessThanOrEqual(30)
+    expect(contracts.AUTHORISATION_MEMBERSHIP_STATUSES).toEqual(['active', 'suspended', 'ended'])
   })
 })
