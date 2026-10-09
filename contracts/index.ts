@@ -28,9 +28,12 @@ export type {
 export type {
   AuthorisationPermissionCatalogue,
   AuthorisationPermissionDefinition,
+  AuthorisationPermissionDefinitionInput,
+  AuthorisationPermissionEffect,
   AuthorisationRiskLevel,
 } from '../shared/permissions'
 export {
+  AUTHORISATION_PERMISSION_EFFECTS,
   AUTHORISATION_PERMISSIONS,
   AUTHORISATION_RISK_LEVELS,
   isPermissionName,
@@ -50,10 +53,11 @@ export type {
   AuthorisationGroupLineage,
   AuthorisationMembership,
   AuthorisationMembershipStatus,
+  AuthorisationPrincipalStatus,
   AuthorisationResource,
   AuthorisationResourceRef,
 } from '../shared/resources'
-export { AUTHORISATION_MEMBERSHIP_STATUSES } from '../shared/resources'
+export { AUTHORISATION_MEMBERSHIP_STATUSES, AUTHORISATION_PRINCIPAL_STATUSES } from '../shared/resources'
 
 // ---------------------------------------------------------------------------
 // Roles, assignments, grants and conditions

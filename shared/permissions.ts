@@ -63,14 +63,33 @@ export function isWildcardPattern(pattern: string): boolean {
   return pattern.includes('*')
 }
 
+export const AUTHORISATION_PERMISSION_EFFECTS = ['view', 'change'] as const
+
+/**
+ * What a permission does, declared by the capability that defines it:
+ *
+ * - `view` — only reads.
+ * - `change` — anything else. A definition without an effect is `change`, so
+ *   an undeclared permission fails closed for paused members.
+ *
+ * The action's name decides nothing: `orders:view` is a view only if its
+ * definition says so.
+ */
+export type AuthorisationPermissionEffect = typeof AUTHORISATION_PERMISSION_EFFECTS[number]
+
 export const permissionDefinitionSchema = z.object({
   name: z.string().refine(isPermissionName, 'Expected <resource>:<action>, e.g. orders:view'),
   /** Human-readable business capability, for administrators choosing roles. */
   description: z.string().trim().min(1).max(500),
   risk: z.enum(AUTHORISATION_RISK_LEVELS),
+  effect: z.enum(AUTHORISATION_PERMISSION_EFFECTS).default('change'),
 }).strict()
 
-export type AuthorisationPermissionDefinition = z.infer<typeof permissionDefinitionSchema>
+/** A permission as the catalogue holds it, with its effect resolved. */
+export type AuthorisationPermissionDefinition = z.output<typeof permissionDefinitionSchema>
+
+/** A permission as a capability declares it: `effect` may be left out, meaning `change`. */
+export type AuthorisationPermissionDefinitionInput = z.input<typeof permissionDefinitionSchema>
 
 /** A validated catalogue, keyed by permission name. */
 export type AuthorisationPermissionCatalogue = ReadonlyMap<string, AuthorisationPermissionDefinition>
@@ -80,8 +99,8 @@ export type AuthorisationPermissionCatalogue = ReadonlyMap<string, Authorisation
  * always part of the catalogue; the host does not supply them.
  */
 export const AUTHORISATION_PERMISSIONS: readonly AuthorisationPermissionDefinition[] = [
-  { name: 'authorisation.roles:view', description: 'See the roles defined in a group and who holds them', risk: 'low' },
-  { name: 'authorisation.grants:manage', description: 'Share or stop sharing a resource with a user or group', risk: 'high' },
-  { name: 'authorisation.role-assignments:manage', description: 'Give members roles in a group, or take them away', risk: 'critical' },
-  { name: 'authorisation.roles:manage', description: 'Define, change or delete a group\'s custom roles', risk: 'critical' },
+  { name: 'authorisation.roles:view', description: 'See the roles defined in a group and who holds them', risk: 'low', effect: 'view' },
+  { name: 'authorisation.grants:manage', description: 'Share or stop sharing a resource with a user or group', risk: 'high', effect: 'change' },
+  { name: 'authorisation.role-assignments:manage', description: 'Give members roles in a group, or take them away', risk: 'critical', effect: 'change' },
+  { name: 'authorisation.roles:manage', description: 'Define, change or delete a group\'s custom roles', risk: 'critical', effect: 'change' },
 ]

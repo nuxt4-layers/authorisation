@@ -1,8 +1,8 @@
-# Authorisation Contract (version 2)
+# Authorisation Contract (version 3)
 
 `@nuxt4-layers/authorisation/contracts` is the only supported import path for this capability's types and pure helpers. It imports nothing but `zod`, and no driver or other capability's package.
 
-Version 2 follows the [Group Model Definition v0.1](https://github.com/nuxt4-layers/platform-architecture/blob/master/docs/identity/group-model-definition-v01.md) (proposed). Changes from version 1 are listed in §11.
+Version 2 follows the [Group Model Definition v0.1](https://github.com/nuxt4-layers/platform-architecture/blob/master/docs/identity/group-model-definition-v01.md) (proposed); version 3 adds paused memberships and principals, and the `effect` of each permission. Changes are listed in §11.
 
 Authorisation answers one question: **may this subject perform this permission on this resource, now?**
 
@@ -36,7 +36,7 @@ A **tenant** is the isolation boundary. It is supplied for each group by the dir
 
 Every human identity has a **personal group**: a unary group whose only member is that principal, like a Unix user's own group. A resource a user keeps for themselves belongs to their personal group. Identities without one, such as service identities, are supported.
 
-Because information belongs to groups, **leaving a group ends the access derived from that membership**, including to resources the leaver created: a company-owned report stays the company's. Joining a group gives access up to the roles held there. Only `active` memberships count; `suspended` and `ended` ones grant nothing.
+Because information belongs to groups, **leaving a group ends the access derived from that membership**, including to resources the leaver created: a company-owned report stays the company's. Joining a group gives access up to the roles held there. An `active` membership counts in full; a `paused` one only to view (§6a); `suspended` and `ended` ones grant nothing.
 
 **Creator provenance is not access.** A resource may record its `creatorPrincipalId`; that alone grants nothing. A role can use it in a condition ("members may edit what they created"), and that role still needs an active membership.
 
@@ -48,7 +48,9 @@ A permission names one business capability: `<resource>:<action>`.
 - `<action>` is a snake-case verb: `view`, `create`, `process_refund`.
 - Scope never appears in the name: `orders:view`, never `orders:view_own`.
 
-Each permission has a description and a risk level:
+Each permission has a description, a risk level and an **effect**: `view` if it only reads, `change` otherwise. A definition without an effect is `change`, so an undeclared permission fails closed for paused members (§6a). The action's name decides nothing: `orders:export` may be a `change` though it alters no order.
+
+Risk levels:
 
 | Risk | Meaning | Default assurance |
 |---|---|---|
@@ -59,14 +61,14 @@ Each permission has a description and a risk level:
 
 Domain capabilities export their definitions from their own contracts; the host passes them to `provideAuthorisationPermissions`. A name defined twice with a different description or risk is refused. Authorisation adds its own:
 
-| Permission | Risk |
-|---|---|
-| `authorisation.roles:view` | low |
-| `authorisation.grants:manage` | high |
-| `authorisation.role-assignments:manage` | critical |
-| `authorisation.roles:manage` | critical |
+| Permission | Risk | Effect |
+|---|---|---|
+| `authorisation.roles:view` | low | view |
+| `authorisation.grants:manage` | high | change |
+| `authorisation.role-assignments:manage` | critical | change |
+| `authorisation.roles:manage` | critical | change |
 
-A permission missing from the catalogue is never granted.
+A permission missing from the catalogue is never granted. A name defined twice with a different description, risk or effect is refused.
 
 ## 4. Roles
 
@@ -116,13 +118,32 @@ A grant is independent of unrelated memberships: ending one membership never rem
 1. Refuse if the permission is not in the catalogue or does not belong to the resource's type (`unknown-permission`).
 2. Refuse if the directory does not know the principal (`unknown-subject`), or does not know the owning group or describes it inconsistently (`unknown-group`).
 3. **Tenant isolation:** if the request has a tenant context, resolved on the server and never taken from the client, refuse a resource in any other tenant (`tenant-mismatch`).
-4. Allow through a **role** held in the owning group, or in an ancestor by an assignment scoped `group-and-descendants`, while an active member of that group and in the resource's tenant.
-5. Otherwise allow through the **personal-group role**, if the resource belongs to the subject's own personal group.
-6. Otherwise allow through an unexpired **grant** that stays inside the tenant (§5).
-7. Otherwise refuse (`not-permitted`).
-8. If allowed, check the session against the permission's risk level. If it falls short, refuse with `insufficient-assurance` and the requirement, so the host can send the user to step up or re-authenticate.
+4. Find every route that covers the permission, each with the **standing** of the membership it rests on (§6a):
+   - a **role** held in the owning group, or in an ancestor by an assignment scoped `group-and-descendants`, while a member of that group and in the resource's tenant;
+   - the **personal-group role**, if the resource belongs to the subject's own personal group;
+   - an unexpired **grant** that stays inside the tenant (§5).
+5. If none, refuse (`not-permitted`).
+6. Take the route with the fullest standing. If every route is paused and the permission is not a `view` at `low` or `medium` risk, refuse (`paused`).
+7. If allowed, check the session against the permission's risk level. If it falls short, refuse with `insufficient-assurance` and the requirement, so the host can send the user to step up or re-authenticate.
 
 The decision is `{ allowed: true, permission, via }` (`via` is `role`, `personal-group` or `grant`) or `{ allowed: false, permission, reason, requirement }`. Reasons are for the server and audit. Only the coarse error codes below cross HTTP.
+
+## 6a. Paused members and principals
+
+A person may pause a membership, or their whole account (iam-integration's pausing process). A paused member is hidden from the group and receives nothing from it, so their reading of sensitive material would go unnoticed. Paused standing therefore confers only permissions whose effect is `view`, at `low` or `medium` risk, whatever the roles or grants say.
+
+The directory reports each membership's status and the principal's own `status` (`active`, `paused` or `suspended`). A route's standing is:
+
+| Route | Standing |
+|---|---|
+| Role assignment | The membership in the group it was made in |
+| Personal-group role | The principal's own status |
+| Grant to a group | The membership in that group |
+| Grant to the principal | Their fullest membership in the resource's tenant; with `externalGrants`, at least their own status |
+
+Each is capped by the principal's own status: a paused principal is view-only everywhere, including their own personal group, and a suspended one has nothing. Anything but `active` or `paused` confers nothing. A route with active standing always wins, so a paused membership never hides access the principal holds in full through another.
+
+Approvals (`authorisationQualifies`) use the same decision, so a paused member never qualifies to approve a change.
 
 ## 7. Errors
 
@@ -133,6 +154,8 @@ The decision is `{ allowed: true, permission, via }` (`via` is `role`, `personal
 | `insufficient-assurance` | 403 | Permitted after step-up or re-authentication |
 | `validation-failed` | 400 | Malformed input |
 | `unavailable` | 503 | Directory or database failure. Fails closed |
+
+A `paused` refusal is `forbidden` over HTTP like any other; the host may tell the signed-in person, from their own state, that resuming lets them act.
 
 A domain capability that must hide whether a resource exists answers *not found* from its own contract.
 
@@ -163,7 +186,7 @@ A directory or database failure refuses the request (`unavailable`). Decisions t
 
 ## 11. Versioning
 
-This is contract version 2, provided by package 0.2. Before 1.0, breaking changes are listed here and in the release notes.
+This is contract version 3, provided by package 0.3. Before 1.0, breaking changes are listed here and in the release notes.
 
 | Version 1 | Version 2 |
 |---|---|
@@ -176,6 +199,13 @@ This is contract version 2, provided by package 0.2. Before 1.0, breaking change
 | `getGroupLineage(groupId)` | `describeGroup(groupId, options)`; both directory methods take `{ consistency }` |
 | Decision source `resource-owner` | `personal-group` |
 | — | Phase 2 adds storage, server functions and `AuthorisationFailure` (§12); no change to version 2's types |
+
+| Version 2 | Version 3 |
+|---|---|
+| Membership status `active`, `suspended` or `ended` | Adds `paused`: view-only (§6a) |
+| `AuthorisationActorContext` without a status | `status: 'active' \| 'paused' \| 'suspended'` is required; it governs the personal group and caps every membership. A directory that omits it confers nothing |
+| Permission definitions: name, description, risk | Adds `effect: 'view' \| 'change'` (default `change`); `AuthorisationPermissionDefinitionInput` is the declared shape, `AuthorisationPermissionDefinition` the catalogue's |
+| Denial reasons | Adds `paused` |
 
 ## 12. Storage and server functions
 

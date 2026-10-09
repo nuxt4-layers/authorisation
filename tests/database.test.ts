@@ -21,9 +21,10 @@ requireDatabaseInCi()
 
 const PERMISSIONS: AuthorisationPermissionDefinition[] = [
   ...AUTHORISATION_PERMISSIONS,
-  { name: 'orders:view', description: 'See orders', risk: 'low' },
-  { name: 'orders:process_refund', description: 'Refund an order', risk: 'high' },
-  { name: 'identity.groups:archive', description: 'Archive a group', risk: 'high' },
+  { name: 'orders:view', description: 'See orders', risk: 'low', effect: 'view' },
+  { name: 'orders:update', description: 'Change orders', risk: 'medium', effect: 'change' },
+  { name: 'orders:process_refund', description: 'Refund an order', risk: 'high', effect: 'change' },
+  { name: 'identity.groups:archive', description: 'Archive a group', risk: 'high', effect: 'change' },
 ]
 
 describe.skipIf(!hasDatabase)('authorisation storage and decisions on PostgreSQL', () => {
@@ -49,7 +50,7 @@ describe.skipIf(!hasDatabase)('authorisation storage and decisions on PostgreSQL
       if (failing) throw new Error('directory down')
       const list = memberships.get(principalId)
       if (!list) return null
-      return { principalId, personalGroup: null, memberships: list.map(m => ({ group: groups.get(m.groupId)!, status: m.status })) }
+      return { principalId, status: 'active', personalGroup: null, memberships: list.map(m => ({ group: groups.get(m.groupId)!, status: m.status })) }
     },
     async describeGroup(groupId, options) {
       reads.push(options.consistency)
@@ -117,6 +118,17 @@ describe.skipIf(!hasDatabase)('authorisation storage and decisions on PostgreSQL
     expect((await service().authorise({ subject: subject('bob'), permission: 'orders:view', resource: order('company') })).allowed).toBe(false)
     member('bob', 'sales', 'suspended')
     expect((await service().authorise({ subject: subject('bob'), permission: 'orders:view', resource: order('sales') })).allowed).toBe(false)
+  })
+
+  it('lets a paused member view but not change, and never qualify to change', async () => {
+    member('paula', 'sales', 'paused')
+    await service().assign({ principalId: 'paula', groupId: 'sales', roleId: 'administrator', actorPrincipalId: 'system' })
+    expect(await service().authorise({ subject: subject('paula'), permission: 'orders:view', resource: order('sales') })).toMatchObject({ allowed: true, via: 'role' })
+    expect(await service().authorise({ subject: subject('paula'), permission: 'orders:update', resource: order('sales') })).toMatchObject({ allowed: false, reason: 'paused' })
+    expect(events.at(-1)).toMatchObject({ type: 'authorisation.denied', actorPrincipalId: 'paula', permission: 'orders:update', reason: 'paused' })
+    expect(await service().qualifies({ principalId: 'paula', permission: 'orders:update', resource: order('sales') })).toBe(false)
+    member('paula', 'sales')
+    expect(await service().qualifies({ principalId: 'paula', permission: 'orders:update', resource: order('sales') })).toBe(true)
   })
 
   it('reaches descendants only through an explicit scope', async () => {

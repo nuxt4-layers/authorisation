@@ -38,10 +38,17 @@ describe('Permission definitions', () => {
   })
 
   it('declares the layer\'s own administration permissions, never as low risk except viewing', () => {
-    for (const { name, risk } of AUTHORISATION_PERMISSIONS) {
+    for (const { name, risk, effect } of AUTHORISATION_PERMISSIONS) {
       expect(name).toMatch(/^authorisation\./)
-      expect(permissionDefinitionSchema.parse({ name, description: 'x', risk })).toBeTruthy()
+      expect(permissionDefinitionSchema.parse({ name, description: 'x', risk, effect })).toBeTruthy()
       if (!name.endsWith(':view')) expect(['high', 'critical']).toContain(risk)
+      expect(effect).toBe(name.endsWith(':view') ? 'view' : 'change')
     }
+  })
+
+  it('takes an effect of view or change, and change when none is declared', () => {
+    expect(permissionDefinitionSchema.parse({ name: 'orders:view', description: 'x', risk: 'low' }).effect).toBe('change')
+    expect(permissionDefinitionSchema.parse({ name: 'orders:view', description: 'x', risk: 'low', effect: 'view' }).effect).toBe('view')
+    expect(() => permissionDefinitionSchema.parse({ name: 'orders:view', description: 'x', risk: 'low', effect: 'read' })).toThrow()
   })
 })

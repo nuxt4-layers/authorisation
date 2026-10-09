@@ -29,6 +29,8 @@ describe('Authorisation public contract', () => {
       'AUTHORISATION_MAX_STALENESS_SECONDS',
       'AUTHORISATION_MEMBERSHIP_STATUSES',
       'AUTHORISATION_PERMISSIONS',
+      'AUTHORISATION_PERMISSION_EFFECTS',
+      'AUTHORISATION_PRINCIPAL_STATUSES',
       'AUTHORISATION_RISK_LEVELS',
       'AuthorisationCompositionError',
       'AuthorisationFailure',
@@ -97,6 +99,7 @@ describe('Authorisation public contract', () => {
 
   it('bounds directory staleness for revocation', () => {
     expect(contracts.AUTHORISATION_MAX_STALENESS_SECONDS).toBeLessThanOrEqual(30)
-    expect(contracts.AUTHORISATION_MEMBERSHIP_STATUSES).toEqual(['active', 'suspended', 'ended'])
+    expect(contracts.AUTHORISATION_MEMBERSHIP_STATUSES).toEqual(['active', 'paused', 'suspended', 'ended'])
+    expect(contracts.AUTHORISATION_PRINCIPAL_STATUSES).toEqual(['active', 'paused', 'suspended'])
   })
 })

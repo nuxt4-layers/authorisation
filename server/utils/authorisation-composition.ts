@@ -5,6 +5,7 @@ import type {
   AuthorisationEventSink,
   AuthorisationPermissionCatalogue,
   AuthorisationPermissionDefinition,
+  AuthorisationPermissionDefinitionInput,
   AuthorisationPolicy,
   AuthorisationPolicyInput,
 } from '../../contracts'
@@ -60,18 +61,19 @@ export function provideAuthorisationEventSink(next: AuthorisationEventSink): voi
 
 /**
  * Adds domain capabilities' permissions to the catalogue. May be called once
- * per capability. Every definition is validated, and redefining a name with a
- * different description or risk is refused, so two capabilities cannot
- * silently disagree about what a permission means.
+ * per capability. Every definition is validated (a missing `effect` is
+ * `change`), and redefining a name with a different description, risk or
+ * effect is refused, so two capabilities cannot silently disagree about what
+ * a permission means.
  */
-export function provideAuthorisationPermissions(definitions: readonly AuthorisationPermissionDefinition[]): void {
+export function provideAuthorisationPermissions(definitions: readonly AuthorisationPermissionDefinitionInput[]): void {
   if (!Array.isArray(definitions)) {
     throw new TypeError('provideAuthorisationPermissions expects an array of permission definitions.')
   }
   const parsed = definitions.map(definition => permissionDefinitionSchema.parse(definition))
   for (const definition of parsed) {
     const existing = catalogue.get(definition.name)
-    if (existing && (existing.risk !== definition.risk || existing.description !== definition.description)) {
+    if (existing && (existing.risk !== definition.risk || existing.description !== definition.description || existing.effect !== definition.effect)) {
       throw new TypeError(`Permission '${definition.name}' is already defined differently.`)
     }
   }
