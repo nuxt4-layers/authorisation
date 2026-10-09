@@ -49,3 +49,17 @@ export class AuthorisationCompositionError extends Error {
     this.port = port
   }
 }
+
+/**
+ * A server function's failure, carrying a contract code. `unavailable` means
+ * the directory or the database failed, and the operation failed closed.
+ */
+export class AuthorisationFailure extends Error {
+  readonly code: AuthorisationErrorCode
+
+  constructor(code: AuthorisationErrorCode, detail?: string) {
+    super(detail ? `${code}: ${detail}` : code)
+    this.name = 'AuthorisationFailure'
+    this.code = code
+  }
+}

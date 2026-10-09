@@ -33,10 +33,10 @@
 | T8 | Client-side enforcement relied on | No client decision API; enforcement is server-only (V8) | Architecture | Implemented |
 | T9 | Missing port leads to an implicit permissive store | Required ports fail closed (ADR-0002) | `tests/composition.test.ts` | Implemented |
 | T10 | Supply-chain compromise | Minimal dependencies (`zod`); `minimumReleaseAge`, `blockExoticSubdeps`, frozen lockfile, dependency review (development-only exceptions recorded in §4) | `pnpm-workspace.yaml`, workflows | Implemented |
-| T11 | Unauthorised change to roles, assignments or grants | The layer's own `authorisation.*` permissions, critical risk for assignments and roles | — | Phase 2 |
-| T12 | Last owner removed, locking a group out | Refuse removing the last owner | — | Phase 2 |
-| T13 | Stale membership from a caching directory adapter | Consistency levels in the port: `strong` (no cache) for high and critical permissions, `bounded` (≤ 30 s) otherwise; directory failure fails closed; decisions never cached or embedded in sessions | `shared/ports.ts`, `docs/contracts.md` §10 | Contract implemented; enforcement phase 2 |
-| T14 | Policy changes not auditable | Events for every role, assignment and grant change, and denials (V16) | Event contract | Contract implemented; emission phase 2 |
+| T11 | Unauthorised change to roles, assignments or grants | Server functions only (no endpoint yet), for callers that have authorised the change; validated against the directory and the catalogue; every change announced. The layer's own `authorisation.*` permissions guard the phase 3 endpoints | `tests/database.test.ts` | Implemented (server functions); endpoints phase 3 |
+| T12 | Last owner removed, locking a group out | Ownership is Identity's: it refuses removing a group's last active owner, and the `owner` role follows Identity's owners through iam-integration's adapters | Identity's approvals tests | Implemented in Identity |
+| T13 | Stale membership from a caching directory adapter | Consistency levels in the port: `strong` (no cache) for high and critical permissions, `bounded` (≤ 30 s) otherwise; directory failure fails closed; decisions never cached or embedded in sessions | `tests/database.test.ts` | Implemented |
+| T14 | Policy changes not auditable | Events for every role, assignment and grant change, and denials (V16) | `tests/database.test.ts` | Implemented |
 | T15 | Personal data in logs and events | Events carry opaque IDs only | `shared/events.ts` | Implemented |
 | T16 | Prototype or path traversal through conditions | Conditions read own properties of `resource.attributes` only | decision tests | Implemented |
 | T17 | Privilege gained through the group hierarchy, e.g. by reparenting a group under one whose admins should not see it | The hierarchy confers nothing by default; inheritance only through an explicit `group-and-descendants` assignment, which follows the current tree; assigning that scope is a critical operation | "the hierarchy confers no privilege by default" tests | Implemented (engine); permission checks on assignment phase 2 |
@@ -45,7 +45,7 @@
 
 | Gap | Risk | Treatment |
 |---|---|---|
-| No storage, endpoints or administration yet | Hosts cannot yet manage roles at runtime | Phase 2 and 3 |
+| No administration endpoints yet | Roles are changed by host server code only | Phase 3 |
 | No Identity layer exists | Hosts must write their own directory adapter | Contract defined; Identity to follow |
 | Phishing-resistant requirement for `critical` can be turned off | Critical operations from phishable sessions | Allowed only with a documented host risk treatment |
 | `simple-git` 3.36.0 advisories GHSA-x6jw-m9v5-85vh (critical), GHSA-858h-whjf-mvg5 and GHSA-g4wm-2vf7-vfgr (high), allow-listed in `dependency-review.yml` | Command execution if an attacker controls `simple-git` arguments or Git configuration | Accepted 2026-10-08, review by 2027-01-08. Reached only through `nuxt` → `@nuxt/devtools` (a devDependency, never installed into hosts); devtools passes fixed arguments (`branch`, `revparse --short HEAD`, `status`) on the local checkout in `nuxt dev` only. No patched 3.x exists, and `simple-git` 4.x drops the default export devtools imports. Remove the allow-list once devtools depends on a patched `simple-git`. |

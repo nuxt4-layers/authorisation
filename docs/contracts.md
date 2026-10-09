@@ -18,7 +18,7 @@ subject + permission + resource + tenant + group context + roles + grants -> dec
 | Users, groups, group types, hierarchy, tenants, memberships and their status, personal groups | Identity (tenant lifecycle may later move to a tenancy capability) | The `AuthorisationDirectory` port, adapted by the host |
 | Resources and their data | The domain capability that owns them | `AuthorisationResource`, described by that capability at decision time |
 | Permissions | Each domain capability declares its own | The catalogue, supplied by the host |
-| Roles, role assignments, grants, decisions | **Authorisation** | Its own schema (phase 2) |
+| Roles, role assignments, grants, decisions | **Authorisation** | Its own schema (§12) |
 
 Authorisation stores no domain data, no groups and no memberships.
 
@@ -175,3 +175,23 @@ This is contract version 2, provided by package 0.2. Before 1.0, breaking change
 | Memberships were assumed current | Each membership has `status`; only `active` counts |
 | `getGroupLineage(groupId)` | `describeGroup(groupId, options)`; both directory methods take `{ consistency }` |
 | Decision source `resource-owner` | `personal-group` |
+| — | Phase 2 adds storage, server functions and `AuthorisationFailure` (§12); no change to version 2's types |
+
+## 12. Storage and server functions
+
+Authorisation keeps custom roles (per tenant), role assignments (principal, group, role, scope) and grants in its own schema, through append-only migrations (`migrateAuthorisationDatabase()`), over the host's pool. Identifiers are opaque text: nothing else about a person is stored.
+
+| Function | Does |
+|---|---|
+| `authorise({ subject, permission, resource, requestTenantId? })` | The decision (§6). Gathers the actor and the owning group from the directory (`strong` for `high` and `critical` permissions, `bounded` otherwise) and the subject's assignments, the tenant's custom roles and the resource's grants from the store. A refusal is announced as `authorisation.denied` |
+| `requireAuthorisation(input)` | As `authorise`, but throws a coarse HTTP error (`forbidden`, `insufficient-assurance` or `unavailable`) unless allowed |
+| `authorisationQualifies({ principalId, permission, resource })` | Whether the principal holds the permission on the resource now, whatever their session: for approvals, where the approver steps up when deciding. `strong` reads |
+| `countAuthorisationQualifying({ permission, resource, excludingPrincipalIds, limit })` | How many principals other than those excluded qualify, up to `limit` (at most 100). Candidates are holders of assignments that can reach the resource's group and of grants on the resource to a principal; grants to a group are not counted, since Authorisation cannot list a group's members, so the count errs low |
+| `listAuthorisationRoleAssignments({ principalId?, groupId? })` | A principal's assignments, or a group's |
+| `assignAuthorisationRole({ principalId, groupId, roleId, scope?, actorPrincipalId })`, `unassignAuthorisationRole({ principalId, groupId, roleId \| null, actorPrincipalId })` | Change assignments: a built-in role, or a custom role of the group's tenant, in a group the directory knows. `authorisation.role-assigned` and `role-unassigned` |
+| `defineAuthorisationRole`, `deleteAuthorisationRole` | A tenant's custom roles: never a built-in ID, never an exact permission missing from the catalogue. `authorisation.role-defined`, `role-changed`, `role-deleted` |
+| `createAuthorisationGrant`, `revokeAuthorisationGrant` | Grants of exact, catalogued permissions of the resource's type. `authorisation.grant-created` and `grant-revoked` |
+
+The functions that change roles, assignments and grants **decide nothing**: their caller has authorised the change. Today that is the host applying Identity's events through iam-integration's adapters (owners hold the `owner` role, members the group's default role); the layer's own administration endpoints, guarded by its `authorisation.*` permissions, are phase 3.
+
+Every function fails closed: a directory or database failure throws `AuthorisationFailure` with code `unavailable`, and invalid input `validation-failed`.
