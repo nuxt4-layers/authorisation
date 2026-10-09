@@ -13,7 +13,7 @@
 
 A Nuxt 4 foundation layer that decides whether a signed-in principal may perform an action on a resource. It is governed by [`nuxt4-layers/platform-architecture`](https://github.com/nuxt4-layers/platform-architecture) (Identity and Authorization Architecture, ADR-0001, ADR-0002).
 
-**Status:** phase 1 of 5, the foundation. The contract, composition ports and decision engine are in place; storage, server functions and administration follow (see [docs/roadmap.md](docs/roadmap.md)).
+**Status:** contract version 3. The contract, composition ports, decision engine, storage and server functions are in place, including view-only access for paused members; administration endpoints and pages follow (see [docs/roadmap.md](docs/roadmap.md)).
 
 ## What it does
 
@@ -51,7 +51,7 @@ export default defineNitroPlugin(() => {
 })
 ```
 
-Domain capabilities declare their permissions, e.g. `{ name: 'orders:process_refund', description: 'Refund an order', risk: 'high' }`, and import types only from `@nuxt4-layers/authorisation/contracts`.
+Domain capabilities declare their permissions, e.g. `{ name: 'orders:process_refund', description: 'Refund an order', risk: 'high', effect: 'change' }`, and import types only from `@nuxt4-layers/authorisation/contracts`.
 
 ## Documentation
 

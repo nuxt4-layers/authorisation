@@ -1,6 +1,6 @@
 {
   "name": "@nuxt4-layers/authorisation",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Nuxt 4 foundation capability that decides whether a signed-in principal may perform an action on a group-owned resource.",

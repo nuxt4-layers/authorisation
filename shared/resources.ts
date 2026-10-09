@@ -64,14 +64,33 @@ export interface AuthorisationGroup {
   tenantId: string
 }
 
-export const AUTHORISATION_MEMBERSHIP_STATUSES = ['active', 'suspended', 'ended'] as const
+export const AUTHORISATION_MEMBERSHIP_STATUSES = ['active', 'paused', 'suspended', 'ended'] as const
+
+/**
+ * - `active` — confers what the principal's roles and grants allow.
+ * - `paused` — paused by the member (or their whole identity is paused):
+ *   confers only permissions whose effect is `view`, at `low` or `medium`
+ *   risk. A paused member is hidden from the group, so their reading of
+ *   sensitive material would go unnoticed.
+ * - `suspended`, `ended` — confer nothing.
+ */
 export type AuthorisationMembershipStatus = typeof AUTHORISATION_MEMBERSHIP_STATUSES[number]
 
-/** A direct membership of the principal in a group. Only `active` ones count. */
+/** A direct membership of the principal in a group, with what it confers now. */
 export interface AuthorisationMembership {
   group: AuthorisationGroup
   status: AuthorisationMembershipStatus
 }
+
+export const AUTHORISATION_PRINCIPAL_STATUSES = ['active', 'paused', 'suspended'] as const
+
+/**
+ * The principal's own standing, whatever their memberships: `paused` when
+ * the person has paused their whole account, `suspended` when it is
+ * suspended or on its way to closure. It governs the personal group and
+ * caps every membership, with the same meanings as a membership's status.
+ */
+export type AuthorisationPrincipalStatus = typeof AUTHORISATION_PRINCIPAL_STATUSES[number]
 
 /**
  * The principal's group context, resolved by the host's directory adapter
@@ -79,6 +98,8 @@ export interface AuthorisationMembership {
  */
 export interface AuthorisationActorContext {
   principalId: string
+  /** The principal's own standing (contract 3). Anything but a known status confers nothing. */
+  status: AuthorisationPrincipalStatus
   /**
    * The principal's own unary group, created with a human identity. Null for
    * identities that have none, such as non-human service identities.

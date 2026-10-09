@@ -15,6 +15,7 @@ export default defineNitroPlugin(() => {
       if (principalId !== 'alice') return null
       return {
         principalId,
+        status: 'active',
         personalGroup: groups['personal-alice'],
         memberships: [{ group: groups['company-a-sales'], status: 'active' }],
       }
@@ -25,7 +26,7 @@ export default defineNitroPlugin(() => {
   })
 
   provideAuthorisationPermissions([
-    { name: 'orders:view', description: 'See orders', risk: 'low' },
+    { name: 'orders:view', description: 'See orders', risk: 'low', effect: 'view' },
     { name: 'orders:create', description: 'Place orders', risk: 'medium' },
     { name: 'orders:process_refund', description: 'Refund an order', risk: 'high' },
   ])

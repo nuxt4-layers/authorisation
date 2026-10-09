@@ -35,12 +35,15 @@ const GROUPS: Record<string, AuthorisationGroup> = {
 
 const PERMISSIONS: AuthorisationPermissionDefinition[] = [
   ...AUTHORISATION_PERMISSIONS,
-  { name: 'orders:view', description: 'See orders', risk: 'low' },
-  { name: 'orders:create', description: 'Place orders', risk: 'medium' },
-  { name: 'orders:update', description: 'Change orders', risk: 'medium' },
-  { name: 'orders:process_refund', description: 'Refund an order', risk: 'high' },
-  { name: 'orders:delete', description: 'Delete an order', risk: 'critical' },
-  { name: 'notes:view', description: 'Read notes', risk: 'low' },
+  { name: 'orders:view', description: 'See orders', risk: 'low', effect: 'view' },
+  { name: 'orders:create', description: 'Place orders', risk: 'medium', effect: 'change' },
+  { name: 'orders:update', description: 'Change orders', risk: 'medium', effect: 'change' },
+  { name: 'orders:view_history', description: 'See who changed an order', risk: 'medium', effect: 'view' },
+  { name: 'orders:view_payment', description: 'See an order\'s payment details', risk: 'high', effect: 'view' },
+  { name: 'orders:export', description: 'Download orders', risk: 'low', effect: 'change' },
+  { name: 'orders:process_refund', description: 'Refund an order', risk: 'high', effect: 'change' },
+  { name: 'orders:delete', description: 'Delete an order', risk: 'critical', effect: 'change' },
+  { name: 'notes:view', description: 'Read notes', risk: 'low', effect: 'view' },
 ]
 const catalogue = new Map(PERMISSIONS.map(p => [p.name, p]))
 
@@ -55,6 +58,7 @@ const strong: AuthorisationSubject = {
 /** Alice, with the given direct memberships (active unless stated). */
 const alice = (...memberships: (string | [string, AuthorisationMembershipStatus])[]): AuthorisationActorContext => ({
   principalId: 'alice',
+  status: 'active',
   personalGroup: GROUPS['personal-alice']!,
   memberships: memberships.map((m) => {
     const [groupId, status] = typeof m === 'string' ? [m, 'active' as const] : m
@@ -240,6 +244,97 @@ describe('decision: membership status and departure', () => {
   })
 })
 
+describe('decision: paused memberships and principals (contract 3)', () => {
+  const owner = [assign('sales', 'owner')]
+  const viewable = ['orders:view', 'orders:view_history']
+  const notViewable = ['orders:create', 'orders:update', 'orders:export', 'orders:view_payment', 'orders:process_refund', 'orders:delete']
+
+  it.each(viewable)('lets a paused member %s: a view at low or medium risk', (permission) => {
+    expect(decide({ actor: alice(['sales', 'paused']), assignments: owner, permission, resource: order('sales') }))
+      .toMatchObject({ allowed: true, via: 'role' })
+  })
+
+  it.each(notViewable)('refuses a paused member %s: a change, or a view at high risk', (permission) => {
+    // Wildcards never cover high or critical permissions, so the role names each one.
+    const full: AuthorisationRoleDefinition = { id: 'full', name: 'Full', permissions: notViewable.map(pattern => ({ pattern })) }
+    const facts = { assignments: [assign('sales', 'full')], customRoles: new Map([['tenant-a', new Map([['full', full]])]]), permission, resource: order('sales') }
+    expect(decide({ ...facts, actor: alice('sales') })).toMatchObject({ allowed: true, via: 'role' })
+    expect(decide({ ...facts, actor: alice(['sales', 'paused']) })).toMatchObject({ allowed: false, reason: 'paused', requirement: null })
+  })
+
+  it('still needs a role that covers the view', () => {
+    expect(decide({ actor: alice(['sales', 'paused']), resource: order('sales') })).toMatchObject({ allowed: false, reason: 'not-permitted' })
+  })
+
+  it('takes the effect from the definition, never from the action\'s name', () => {
+    expect(decide({ actor: alice(['sales', 'paused']), assignments: owner, permission: 'orders:export', resource: order('sales') }))
+      .toMatchObject({ allowed: false, reason: 'paused' })
+  })
+
+  it('treats a catalogue entry without an effect as a change', () => {
+    const undeclared = new Map(catalogue)
+    undeclared.set('orders:view', { name: 'orders:view', description: 'See orders', risk: 'low' } as AuthorisationPermissionDefinition)
+    expect(decide({ actor: alice(['sales', 'paused']), assignments: owner, catalogue: undeclared, resource: order('sales') }))
+      .toMatchObject({ allowed: false, reason: 'paused' })
+  })
+
+  it('prefers an active route: a paused membership never hides one', () => {
+    const assignments = [assign('sales', 'owner'), assign('london', 'administrator', 'group-and-descendants')]
+    expect(decide({ actor: alice(['sales', 'paused'], 'london'), assignments, permission: 'orders:update', resource: order('sales') }))
+      .toMatchObject({ allowed: true, via: 'role' })
+  })
+
+  describe('a paused principal', () => {
+    const paused = (...memberships: Parameters<typeof alice>): AuthorisationActorContext => ({ ...alice(...memberships), status: 'paused' })
+
+    it('caps every membership, even one the directory reports active', () => {
+      expect(decide({ actor: paused('sales'), assignments: owner, resource: order('sales') })).toMatchObject({ allowed: true })
+      expect(decide({ actor: paused('sales'), assignments: owner, permission: 'orders:update', resource: order('sales') }))
+        .toMatchObject({ allowed: false, reason: 'paused' })
+    })
+
+    it('is view-only in their own personal group', () => {
+      expect(decide({ actor: paused(), resource: order('personal-alice') })).toMatchObject({ allowed: true, via: 'personal-group' })
+      expect(decide({ actor: paused(), permission: 'orders:update', resource: order('personal-alice') }))
+        .toMatchObject({ allowed: false, reason: 'paused' })
+    })
+  })
+
+  it.each(['suspended', 'unknown', undefined])('gives a principal whose status is %s nothing, not even their personal group', (status) => {
+    const actor = { ...alice('sales'), status } as unknown as AuthorisationActorContext
+    expect(decide({ actor, resource: order('personal-alice') })).toMatchObject({ allowed: false, reason: 'not-permitted' })
+    expect(decide({ actor, assignments: owner, resource: order('sales') })).toMatchObject({ allowed: false, reason: 'not-permitted' })
+  })
+
+  describe('grants', () => {
+    const grant = (subject: AuthorisationGrant['subject']): AuthorisationGrant[] =>
+      [{ resource: { type: 'orders', id: 'order-1' }, subject, permissions: ['orders:view', 'orders:update'], expiresAt: null }]
+
+    it('limits a grant to a group to views while the membership is paused', () => {
+      const grants = grant({ kind: 'group', groupId: 'london' })
+      expect(decide({ actor: alice(['london', 'paused']), grants, resource: order('sales') })).toMatchObject({ allowed: true, via: 'grant' })
+      expect(decide({ actor: alice(['london', 'paused']), grants, permission: 'orders:update', resource: order('sales') }))
+        .toMatchObject({ allowed: false, reason: 'paused' })
+    })
+
+    it('limits a direct grant to views when every membership in the tenant is paused', () => {
+      const grants = grant({ kind: 'principal', principalId: 'alice' })
+      expect(decide({ actor: alice(['club-x', 'paused']), grants, permission: 'orders:update', resource: order('sales') }))
+        .toMatchObject({ allowed: false, reason: 'paused' })
+      expect(decide({ actor: alice(['club-x', 'paused'], 'company-a'), grants, permission: 'orders:update', resource: order('sales') }))
+        .toMatchObject({ allowed: true, via: 'grant' })
+    })
+
+    it('limits an external grant to views while the principal is paused', () => {
+      const grants = grant({ kind: 'principal', principalId: 'alice' })
+      const policy = resolveAuthorisationPolicy({ externalGrants: true })
+      const actor: AuthorisationActorContext = { ...alice(), status: 'paused' }
+      expect(decide({ actor, grants, policy, resource: order('sales') })).toMatchObject({ allowed: true, via: 'grant' })
+      expect(decide({ actor, grants, policy, permission: 'orders:update', resource: order('sales') })).toMatchObject({ allowed: false, reason: 'paused' })
+    })
+  })
+})
+
 describe('decision: creator provenance and ownership', () => {
   const report = order('sales', { creatorPrincipalId: 'alice' })
 
@@ -265,7 +360,7 @@ describe('decision: creator provenance and ownership', () => {
   })
 
   it('keeps the resource with its owning group after the creator leaves', () => {
-    const bob: AuthorisationActorContext = { principalId: 'bob', personalGroup: GROUPS['personal-bob']!, memberships: [{ group: GROUPS.sales!, status: 'active' }] }
+    const bob: AuthorisationActorContext = { principalId: 'bob', status: 'active', personalGroup: GROUPS['personal-bob']!, memberships: [{ group: GROUPS.sales!, status: 'active' }] }
     const decision = decide({ subject: { ...strong, principalId: 'bob' }, actor: bob, assignments: [assign('sales', 'viewer', 'group', 'bob')], resource: report })
     expect(decision).toMatchObject({ allowed: true, via: 'role' })
   })
@@ -290,7 +385,7 @@ describe('decision: personal groups', () => {
   })
 
   it('works for an identity without a personal group', () => {
-    const service: AuthorisationActorContext = { principalId: 'alice', personalGroup: null, memberships: [{ group: GROUPS.sales!, status: 'active' }] }
+    const service: AuthorisationActorContext = { principalId: 'alice', status: 'active', personalGroup: null, memberships: [{ group: GROUPS.sales!, status: 'active' }] }
     expect(decide({ actor: service, assignments: [assign('sales', 'viewer')], resource: order('sales') })).toMatchObject({ allowed: true })
     expect(decide({ actor: service, resource: order('personal-alice') })).toMatchObject({ allowed: false })
   })

@@ -25,7 +25,7 @@
 |---|---|---|---|---|
 | T1 | Access granted by default or by an unanticipated path | Deny by default; unknown permission, principal or group refused (V8) | `tests/decision.test.ts` "deny by default" | Implemented |
 | T2 | Cross-tenant access | Tenant supplied by the directory, never the client; separate `tenant-mismatch` check against the server-resolved request tenant; roles, custom roles and grants confined to the resource's tenant; no superuser (V8) | "tenant isolation" decision tests | Implemented |
-| T3 | Access kept after leaving a group | Only `active` memberships count; roles and principal grants require them; creator provenance grants nothing; grants stay inside the resource's tenant by default | "membership status and departure", "creator provenance" tests | Implemented |
+| T3 | Access kept after leaving a group | Only `active` and `paused` memberships count; roles and principal grants require them; creator provenance grants nothing; grants stay inside the resource's tenant by default | "membership status and departure", "creator provenance" tests | Implemented |
 | T4 | Privilege escalation through broad wildcards | Wildcards never cover high or critical permissions; a role naming an unknown permission is refused at startup | decision and composition tests | Implemented |
 | T5 | Typos that silently grant nothing or everything | Permission and pattern grammar; catalogue membership required | `tests/permissions.test.ts` | Implemented |
 | T6 | Sensitive operations from a weak or stale session | Risk level maps to assurance; floors in the policy (V8) | policy and decision tests | Implemented |
@@ -39,6 +39,7 @@
 | T14 | Policy changes not auditable | Events for every role, assignment and grant change, and denials (V16) | `tests/database.test.ts` | Implemented |
 | T15 | Personal data in logs and events | Events carry opaque IDs only | `shared/events.ts` | Implemented |
 | T16 | Prototype or path traversal through conditions | Conditions read own properties of `resource.attributes` only | decision tests | Implemented |
+| T18 | A paused member, hidden from the group, changes its information or reads sensitive material unnoticed | Paused standing (a membership, or the whole principal) confers only `view` permissions at `low` or `medium` risk on every route, personal group and grants included; `effect` is declared per permission and defaults to `change`; an unknown principal status confers nothing; an active route is never hidden by a paused one (§6a) | "paused memberships and principals" decision tests; `tests/database.test.ts` | Implemented |
 | T17 | Privilege gained through the group hierarchy, e.g. by reparenting a group under one whose admins should not see it | The hierarchy confers nothing by default; inheritance only through an explicit `group-and-descendants` assignment, which follows the current tree; assigning that scope is a critical operation | "the hierarchy confers no privilege by default" tests | Implemented (engine); permission checks on assignment phase 2 |
 
 ## 4. Deferred controls and risk treatments
@@ -46,7 +47,6 @@
 | Gap | Risk | Treatment |
 |---|---|---|
 | No administration endpoints yet | Roles are changed by host server code only | Phase 3 |
-| No Identity layer exists | Hosts must write their own directory adapter | Contract defined; Identity to follow |
 | Phishing-resistant requirement for `critical` can be turned off | Critical operations from phishable sessions | Allowed only with a documented host risk treatment |
 | `simple-git` 3.36.0 advisories GHSA-x6jw-m9v5-85vh (critical), GHSA-858h-whjf-mvg5 and GHSA-g4wm-2vf7-vfgr (high), allow-listed in `dependency-review.yml` | Command execution if an attacker controls `simple-git` arguments or Git configuration | Accepted 2026-10-08, review by 2027-01-08. Reached only through `nuxt` → `@nuxt/devtools` (a devDependency, never installed into hosts); devtools passes fixed arguments (`branch`, `revparse --short HEAD`, `status`) on the local checkout in `nuxt dev` only. No patched 3.x exists, and `simple-git` 4.x drops the default export devtools imports. Remove the allow-list once devtools depends on a patched `simple-git`. |
 | `braces` 3.0.3 advisory GHSA-vfj7-8cjw-p6xm (high), allow-listed in `dependency-review.yml` | Denial of service from a deeply nested brace pattern | Accepted 2026-10-08, review by 2027-01-08. Reached only through `nuxt` → `nitropack` → `globby`/`micromatch` (devDependencies here; `nuxt` is a peer), which expand glob patterns from the project's own configuration at build time, never user input. No patched `braces` release exists. Remove the allow-list once one does. |

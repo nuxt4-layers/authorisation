@@ -1,12 +1,12 @@
 {
   "schemaVersion": "1",
   "name": "@nuxt4-layers/authorisation",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "classification": "foundation",
   "provides": [
     {
       "capability": "Authorisation",
-      "contractVersion": "2"
+      "contractVersion": "3"
     }
   ],
   "requires": [

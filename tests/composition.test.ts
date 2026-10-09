@@ -98,6 +98,17 @@ describe('Authorisation permission catalogue', () => {
     provideAuthorisationPermissions([{ name: 'orders:view', description: 'See orders', risk: 'low' }])
     expect(() => provideAuthorisationPermissions([{ name: 'orders:view', description: 'See orders', risk: 'low' }])).not.toThrow()
     expect(() => provideAuthorisationPermissions([{ name: 'orders:view', description: 'See orders', risk: 'medium' }])).toThrow(TypeError)
+    expect(() => provideAuthorisationPermissions([{ name: 'orders:view', description: 'See orders', risk: 'low', effect: 'view' }])).toThrow(TypeError)
+  })
+
+  it('records each permission\'s effect, change unless declared', () => {
+    provideAuthorisationPermissions([
+      { name: 'orders:view', description: 'See orders', risk: 'low', effect: 'view' },
+      { name: 'orders:create', description: 'Place orders', risk: 'medium' },
+    ])
+    expect(useAuthorisationCatalogue().get('orders:view')?.effect).toBe('view')
+    expect(useAuthorisationCatalogue().get('orders:create')?.effect).toBe('change')
+    expect(useAuthorisationCatalogue().get('authorisation.roles:view')?.effect).toBe('view')
   })
 
   it('refuses an invalid definition and adds nothing from that call', () => {

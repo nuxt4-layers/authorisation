@@ -23,6 +23,9 @@ export type AuthorisationGrantSource =
  * - `tenant-mismatch` — the resource belongs to a different tenant from the
  *   request's tenant context.
  * - `not-permitted` — no role, personal-group role or grant covers it.
+ * - `paused` — one covers it, but only through a paused membership or a
+ *   paused principal, and the permission is not a `view` at `low` or
+ *   `medium` risk. The person may resume to act.
  * - `insufficient-assurance` — permitted, but the session must step up or
  *   re-authenticate first; `requirement` says how.
  */
@@ -32,6 +35,7 @@ export type AuthorisationDenialReason =
   | 'unknown-group'
   | 'tenant-mismatch'
   | 'not-permitted'
+  | 'paused'
   | 'insufficient-assurance'
 
 export type AuthorisationDecision =

@@ -38,11 +38,11 @@ The host application:
 - selects a compatible version and pins it;
 - supplies a PostgreSQL pool through `provideAuthorisationDatabase` (required) and calls `migrateAuthorisationDatabase()` once from its Nitro plugin;
 - supplies a directory through `provideAuthorisationDirectory` (required), adapting Identity's contract:
-  - `resolveActor(principalId, options)` returns the principal's personal group (or `null` for identities without one) and direct memberships, each with its group (lineage and tenant) and `status`, or `null` for an unknown principal;
+  - `resolveActor(principalId, options)` returns the principal's own `status` (`active`, `paused` or `suspended`, from the identity's state), their personal group (or `null` for identities without one) and direct memberships, each with its group (lineage and tenant) and `status` (`active`, `paused`, `suspended` or `ended`), or `null` for an unknown principal;
   - `describeGroup(groupId, options)` returns the group's lineage (root first, one parent per group) and its tenant, or `null`;
   - both honour `options.consistency`: `strong` reads the source of truth with no cache; `bounded` may use a cache no older than `AUTHORISATION_MAX_STALENESS_SECONDS` (30 s). A failure must reject, never return stale or partial data (docs/contracts.md §10);
   - the hierarchy it describes must not imply membership: a member of a parent group is not listed as a member of its children unless Identity's own versioned policy says so;
-- supplies every domain capability's permission definitions through `provideAuthorisationPermissions` (once per capability is fine);
+- supplies every domain capability's permission definitions through `provideAuthorisationPermissions` (once per capability is fine), each with the `effect` its capability declares (`view` or `change`; missing means `change`);
 - optionally supplies an event sink and policy overrides;
 - passes the authenticated principal from Authentication as the subject of each decision;
 - integration-tests the composed system, including negative tests for tenant isolation and for leaving a group.
