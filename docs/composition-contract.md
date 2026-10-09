@@ -36,7 +36,7 @@ Domain capabilities depend on Authorisation's contract, never the reverse.
 The host application:
 
 - selects a compatible version and pins it;
-- supplies a PostgreSQL pool through `provideAuthorisationDatabase` (required; used from phase 2);
+- supplies a PostgreSQL pool through `provideAuthorisationDatabase` (required) and calls `migrateAuthorisationDatabase()` once from its Nitro plugin;
 - supplies a directory through `provideAuthorisationDirectory` (required), adapting Identity's contract:
   - `resolveActor(principalId, options)` returns the principal's personal group (or `null` for identities without one) and direct memberships, each with its group (lineage and tenant) and `status`, or `null` for an unknown principal;
   - `describeGroup(groupId, options)` returns the group's lineage (root first, one parent per group) and its tenant, or `null`;
@@ -64,7 +64,7 @@ export default defineNitroPlugin(() => {
 The authorisation layer:
 
 - owns the permission catalogue rules, roles, role assignments, grants and the decision engine;
-- owns the `authorisation` database schema and its migrations (phase 2);
+- owns the `authorisation` database schema and its migrations;
 - enforces decisions on the server only;
 - publishes `AuthorisationDecision` and `AuthorisationEvent`;
 - fails closed when a required port is absent, or the directory or database fails.

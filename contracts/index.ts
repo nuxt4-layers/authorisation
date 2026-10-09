@@ -98,6 +98,7 @@ export {
   AUTHORISATION_ERROR_CODES,
   AUTHORISATION_ERROR_STATUS,
   AuthorisationCompositionError,
+  AuthorisationFailure,
   isAuthorisationErrorCode,
 } from '../shared/errors'
 

@@ -31,6 +31,7 @@ describe('Authorisation public contract', () => {
       'AUTHORISATION_PERMISSIONS',
       'AUTHORISATION_RISK_LEVELS',
       'AuthorisationCompositionError',
+      'AuthorisationFailure',
       'BUILT_IN_ROLE_IDS',
       'CONDITION_OPERATORS',
       'DEFAULT_AUTHORISATION_POLICY',
