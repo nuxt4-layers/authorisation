@@ -232,7 +232,7 @@ Every function fails closed: a directory, database or clock failure (§13) throw
 
 ## 13. Time
 
-Authorisation reads the current time from the clock the host supplies (`provideAuthorisationClock({ now })`), as iam-integration's architecture §7 asks of every member; without one, it uses the system clock. A host supplies the same clock to every member, or none.
+Authorisation reads the current time from the clock the host supplies (`provideAuthorisationClock({ now })`), as [iam-integration's architecture §7](https://github.com/nuxt4-layers/iam-integration/blob/e986245d746507bf7093ca203e346ab1b571e3a8/docs/architecture.md#7-time) asks of every member; without one, it uses the system clock. A host supplies the same clock to every member, or none.
 
 - Every time Authorisation keeps or judges comes from the clock: whether a grant has expired (`expiresAt`, at each decision and when a grant is made), whether an authentication is recent enough for the permission's risk (`maxAuthenticationAgeSeconds`), the times it records (`created_at` of assignments, custom roles and grants; a custom role's `updated_at`), events' `occurredAt` and an export's `exportedAt`. The database judges no time of its own: each such time is passed to it from the clock.
 - The clock is read once per decision, before anything else, and that one time decides the whole decision.
