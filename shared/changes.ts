@@ -316,6 +316,10 @@ export const CHANGE_REFUSALS = [
   'risk-changed',
   'requester-not-qualified',
   'change-differs',
+  'grant-gone',
+  'unknown-holder',
+  'digest-mismatch',
+  'tenant-mismatch',
 ] as const
 export type AuthorisationChangeRefusal = typeof CHANGE_REFUSALS[number]
 
