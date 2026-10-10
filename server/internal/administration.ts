@@ -7,11 +7,14 @@ import type {
   AuthorisationDirectory,
   AuthorisationGrantView,
   AuthorisationGroupAccess,
+  AuthorisationLegalHolds,
+  AuthorisationPolicy,
   AuthorisationRoleDefinition,
   AuthorisationRoleDocument,
   AuthorisationRoleView,
   AuthorisationSelfView,
   AuthorisationSubject,
+  AuthorisationTenantExport,
   AuthorisationTenantRoles,
 } from '../../contracts'
 import {
@@ -47,6 +50,10 @@ export interface AdministrationDependencies {
   changes: AuthorisationChanges
   directory: AuthorisationDirectory
   now: () => Date
+  /** For the retention periods. Defaults to the secure defaults. */
+  policy?: AuthorisationPolicy
+  /** The host's legal-hold port, or null: without it, retention keeps every change a hold might cover. */
+  legalHolds?: () => AuthorisationLegalHolds | null
 }
 
 const subjectSchema = z.object({
@@ -66,7 +73,7 @@ function parse<T>(run: () => T): T {
 
 const DAY = 86_400_000
 
-export function createAdministration({ db, schemaName, service, changes, directory, now }: AdministrationDependencies) {
+export function createAdministration({ db, schemaName, service, changes, directory, now, policy, legalHolds = () => null }: AdministrationDependencies) {
   const store = createStore(db, schemaName)
   const subjectOf = (value: unknown) => parse(() => subjectSchema.parse(value)) as AuthorisationSubject
   const groupOf = (value: unknown) => parse(() => identifierSchema.parse(value))
@@ -80,6 +87,37 @@ export function createAdministration({ db, schemaName, service, changes, directo
 
   function roleView(role: AuthorisationRoleDefinition, builtIn: boolean): AuthorisationRoleView {
     return { id: role.id, name: role.name, description: role.description ?? null, builtIn, risk: changes.riskOfRole(role), permissions: role.permissions }
+  }
+
+  /**
+   * Retention (iam-integration retention): delivered events and decided
+   * changes past their period. A change is deleted only when the host's
+   * legal-hold port says no hold covers its group; without the port, or when
+   * it fails, the change is kept for the next run. Announced only when
+   * something was deleted, with counts.
+   */
+  async function applyRetention(at: Date, correlationId: string, limit: number): Promise<{ outboxEvents: number, changes: number }> {
+    const periods = policy?.retention ?? { outboxDays: 30, changeDays: 730 }
+    const holds = legalHolds()
+    const candidates = holds ? await io('store', () => store.decidedBefore(new Date(at.getTime() - periods.changeDays * DAY), limit)) : []
+    const free: string[] = []
+    for (const candidate of candidates) {
+      try {
+        if (!(await holds!.covers({ kind: 'group', id: candidate.groupId }))) free.push(candidate.changeId)
+      }
+      catch {
+        // Unknown: keep it.
+      }
+    }
+    return io('store', () => db.transaction(async (client) => {
+      const s = createStore(client, schemaName)
+      const outboxEvents = await s.deleteDeliveredEvents(new Date(at.getTime() - periods.outboxDays * DAY))
+      const changes = await s.deleteChanges(free)
+      if (outboxEvents + changes > 0) {
+        await enqueue(client, db.schema, { type: 'authorisation.retention-applied', data: { outboxEvents, changes } }, { actorPrincipalId: null, correlationId, at })
+      }
+      return { outboxEvents, changes }
+    }))
   }
 
   async function documentFor(tenantId: string): Promise<AuthorisationRoleDocument> {
@@ -224,7 +262,63 @@ export function createAdministration({ db, schemaName, service, changes, directo
         }
         return due.length
       }))
-      return { expiredAssignments: removed, ...swept, overdueReviews: overdue }
+      const retention = await applyRetention(at, correlationId, limit)
+      return { expiredAssignments: removed, ...swept, overdueReviews: overdue, retention }
+    },
+
+    /**
+     * Authorisation's part of a deleted group (iam-integration group
+     * deletion), on Identity's `group.deleted` or `group.disposal-due` when
+     * disposal is due: its assignments, the grants on what it owned and to it,
+     * its access settings and its changes. Decides nothing: the host's event
+     * handler calls it only when no hold defers it. Idempotent; announced as
+     * `authorisation.group-disposed` every time, which Identity counts once.
+     */
+    async disposeGroup(input: { groupId: string, correlationId: string }): Promise<{ assignments: number, grants: number, changes: number }> {
+      const groupId = groupOf(input.groupId)
+      const correlationId = parse(() => correlationIdSchema.parse(input.correlationId))
+      const at = now()
+      return io('store', () => db.transaction(async (client) => {
+        const removed = await createStore(client, schemaName).disposeGroup(groupId)
+        await enqueue(client, db.schema, { type: 'authorisation.group-disposed', data: { groupId, ...removed } }, { actorPrincipalId: null, correlationId, at })
+        return removed
+      }))
+    },
+
+    /** Authorisation's part of a closed tenant: its custom roles. As `disposeGroup`, on `tenant.closed` or `tenant.disposal-due`. */
+    async disposeTenant(input: { tenantId: string, correlationId: string }): Promise<{ roles: number, changes: number }> {
+      const tenantId = groupOf(input.tenantId)
+      const correlationId = parse(() => correlationIdSchema.parse(input.correlationId))
+      const at = now()
+      return io('store', () => db.transaction(async (client) => {
+        const removed = await createStore(client, schemaName).disposeTenant(tenantId)
+        await enqueue(client, db.schema, { type: 'authorisation.tenant-disposed', data: { tenantId, ...removed } }, { actorPrincipalId: null, correlationId, at })
+        return removed
+      }))
+    },
+
+    /**
+     * Authorisation's part of a closing tenant's governance export, for the
+     * groups Identity's part names. Server-only: iam-integration's adapter
+     * asks for it only once Identity has authorised the requester.
+     */
+    async exportTenant(input: { tenantId: string, groupIds: readonly string[], correlationId: string }): Promise<AuthorisationTenantExport> {
+      const tenantId = groupOf(input.tenantId)
+      parse(() => correlationIdSchema.parse(input.correlationId))
+      if (!Array.isArray(input.groupIds) || input.groupIds.length > 100_000) throw new AuthorisationFailure('validation-failed')
+      const groupIds = [...new Set(input.groupIds.map(groupOf))].sort()
+      const exportedAt = now().toISOString()
+      const roles = await documentFor(tenantId)
+      const assignments: AuthorisationAssignmentView[] = []
+      const grants: AuthorisationGrantView[] = []
+      const groupAccess: AuthorisationGroupAccess[] = []
+      for (const groupId of groupIds) {
+        assignments.push(...await io('store', () => store.assignmentViews({ groupId })))
+        grants.push(...await io('store', () => store.grantViewsOwnedBy(groupId)))
+        const { version: _version, ...access } = await io('store', () => store.groupAccess(groupId, tenantId))
+        groupAccess.push(access)
+      }
+      return { tenantId, exportedAt, roles, assignments, grants, groupAccess }
     },
 
     /** The tenant's custom roles as a versioned document. Server-only. */

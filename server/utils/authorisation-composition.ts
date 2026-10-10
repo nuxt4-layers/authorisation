@@ -5,6 +5,7 @@ import type {
   AuthorisationDirectory,
   AuthorisationEventSink,
   AuthorisationGovernance,
+  AuthorisationLegalHolds,
   AuthorisationPermissionCatalogue,
   AuthorisationPermissionDefinition,
   AuthorisationPermissionDefinitionInput,
@@ -38,6 +39,7 @@ let policy: AuthorisationPolicy | null = null
 let clock: AuthorisationClock | null = null
 let governance: AuthorisationGovernance | null = null
 let subjectResolver: AuthorisationSubjectResolver | null = null
+let legalHolds: AuthorisationLegalHolds | null = null
 const catalogue = new Map<string, AuthorisationPermissionDefinition>(
   AUTHORISATION_PERMISSIONS.map(definition => [definition.name, definition]),
 )
@@ -78,6 +80,22 @@ export function provideAuthorisationSubjectResolver(next: AuthorisationSubjectRe
     throw new TypeError('provideAuthorisationSubjectResolver expects an object with a resolve(event) function.')
   }
   subjectResolver = next
+}
+
+/**
+ * Optional: the legal holds retention asks about (iam-integration's
+ * `legalHoldsFromMembers`). Without it, retention deletes delivered events
+ * only and keeps every decided change.
+ */
+export function provideAuthorisationLegalHolds(next: AuthorisationLegalHolds): void {
+  if (typeof next?.covers !== 'function') {
+    throw new TypeError('provideAuthorisationLegalHolds expects an object with a covers(subject) function.')
+  }
+  legalHolds = next
+}
+
+export function useAuthorisationLegalHolds(): AuthorisationLegalHolds | null {
+  return legalHolds
 }
 
 /** Refused decisions (`authorisation.denied`), best effort. Every other event goes through the outbox. */
@@ -203,6 +221,7 @@ export function clearAuthorisationComposition(): void {
   clock = null
   governance = null
   subjectResolver = null
+  legalHolds = null
   catalogue.clear()
   for (const definition of AUTHORISATION_PERMISSIONS) catalogue.set(definition.name, definition)
 }

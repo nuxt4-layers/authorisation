@@ -17,11 +17,17 @@ import {
   provideAuthorisationDatabase,
   provideAuthorisationDirectory,
   provideAuthorisationGovernance,
+  provideAuthorisationLegalHolds,
   provideAuthorisationPermissions,
 } from '../server/utils/authorisation-composition'
 import {
   assignAuthorisationRole,
   authorisationDefaultRoles,
+  createAuthorisationGrant,
+  defineAuthorisationRole,
+  disposeAuthorisationGroup,
+  disposeAuthorisationTenant,
+  exportAuthorisationTenantData,
   authorise,
   eraseAuthorisationPrincipal,
   exportAuthorisationRoles,
@@ -516,6 +522,64 @@ describe.skipIf(!hasDatabase)('access administration on PostgreSQL', () => {
       expect(await relayAuthorisationOutbox({ publish: async () => { throw new Error('down') } })).toEqual({ published: 0, failed: 1 })
       error.mockRestore()
       expect((await relayed()).map(e => e.type)).toEqual(['authorisation.assignment-confirmed', 'authorisation.change-decided', 'authorisation.change-requested'])
+    })
+  })
+
+  describe('end of life (iam-integration group deletion, tenant lifecycle and retention)', () => {
+    it('disposes of a deleted group\'s assignments, grants, access settings and changes, and confirms it every time', async () => {
+      group('doomed', 'company')
+      await owner('dora', 'doomed')
+      member('dan', 'doomed')
+      await assignAuthorisationRole({ principalId: 'dan', groupId: 'doomed', roleId: 'member', actorPrincipalId: 'dora' })
+      await createAuthorisationGrant({ grant: { resource: { type: 'orders', id: 'order-doomed', owningGroupId: 'doomed' }, subject: { kind: 'principal', principalId: 'mia' }, permissions: ['orders:view'], expiresAt: null }, actorPrincipalId: 'dora' })
+      await createAuthorisationGrant({ grant: { resource: { type: 'orders', id: 'order-sales', owningGroupId: 'sales' }, subject: { kind: 'group', groupId: 'doomed' }, permissions: ['orders:view'], expiresAt: null }, actorPrincipalId: 'sam' })
+      await request(subject('dora'), 'role.assign', { principalId: 'dan', groupId: 'doomed', roleId: 'administrator' })
+      await relayed()
+
+      expect(await disposeAuthorisationGroup({ groupId: 'doomed', correlationId: CORRELATION })).toEqual({ assignments: 2, grants: 2, changes: 1 })
+      expect((await relayed()).map(e => [e.type, e.data])).toEqual([['authorisation.group-disposed', { groupId: 'doomed', assignments: 2, grants: 2, changes: 1 }]])
+      const { rows } = await pool.query(`select (select count(*)::int from authorisation."role_assignment" where group_id = 'doomed') as a,
+        (select count(*)::int from authorisation."grant" where owning_group_id = 'doomed' or subject_id = 'doomed') as g`)
+      expect(rows[0]).toEqual({ a: 0, g: 0 })
+      // Delivered again: nothing left, and confirmed again, which Identity counts once.
+      expect(await disposeAuthorisationGroup({ groupId: 'doomed', correlationId: CORRELATION })).toEqual({ assignments: 0, grants: 0, changes: 0 })
+      expect((await relayed()).map(e => e.type)).toEqual(['authorisation.group-disposed'])
+      await expect(disposeAuthorisationGroup({ groupId: 'not an id!', correlationId: CORRELATION })).rejects.toMatchObject({ code: 'validation-failed' })
+    })
+
+    it('disposes of a closed tenant\'s custom roles', async () => {
+      await defineAuthorisationRole({ tenantId: 'tenant-b', role: { id: 'auditor', name: 'Auditor', permissions: [{ pattern: 'orders:view' }] }, actorPrincipalId: 'sole' })
+      await relayed()
+      expect(await disposeAuthorisationTenant({ tenantId: 'tenant-b', correlationId: CORRELATION })).toEqual({ roles: 1, changes: 0 })
+      expect((await relayed()).map(e => [e.type, e.data])).toEqual([['authorisation.tenant-disposed', { tenantId: 'tenant-b', roles: 1, changes: 0 }]])
+      expect((await exportAuthorisationRoles({ tenantId: 'tenant-b' })).roles).toEqual([])
+    })
+
+    it('gives the tenant\'s governance export for the groups Identity names, and nothing else', async () => {
+      const exported = await exportAuthorisationTenantData({ tenantId: 'tenant-a', groupIds: ['sales', 'company'], correlationId: CORRELATION })
+      expect(exported).toMatchObject({ tenantId: 'tenant-a', roles: { tenantId: 'tenant-a' } })
+      expect(new Set(exported.assignments.map(a => a.groupId))).toEqual(new Set(['company', 'sales']))
+      expect(exported.groupAccess.map(a => a.groupId)).toEqual(['company', 'sales'])
+      expect(exported.assignments.some(a => a.groupId === 'team')).toBe(false)
+    })
+
+    it('deletes delivered events and decided changes past their period, never a change a hold may cover', async () => {
+      const decided = await request(subject('adam'), 'role.assign', { principalId: 'gus', groupId: 'sales', roleId: 'viewer' })
+      if (decided.state === 'awaiting-approval' || decided.state === 'delayed') await changes().cancel({ subject: subject('adam'), changeId: decided.changeId, correlationId: CORRELATION })
+      await relayed()
+      hoursLater(24 * 800)
+      // Without the legal-hold port, no change is deleted.
+      expect((await runAuthorisationMaintenance()).retention.changes).toBe(0)
+      const kept = async () => (await pool.query(`select 1 from authorisation."pending_change" where change_id = $1`, [decided.changeId])).rows.length
+      const held = new Set(['sales'])
+      provideAuthorisationLegalHolds({ async covers({ id }) { return held.has(id) } })
+      await runAuthorisationMaintenance()
+      expect(await kept()).toBe(1)
+      held.clear()
+      const { retention } = await runAuthorisationMaintenance()
+      expect(retention.changes).toBeGreaterThan(0)
+      expect(await kept()).toBe(0)
+      expect((await relayed()).find(e => e.type === 'authorisation.retention-applied')).toBeTruthy()
     })
   })
 })

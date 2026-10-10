@@ -117,6 +117,21 @@ const payloads = {
     reviewDueAt: instantSchema,
   }),
   'authorisation.principal-erased': z.strictObject({ principalId: id, assignments: z.number().int().min(0), grants: z.number().int().min(0) }),
+  /**
+   * Authorisation's part of a deleted group is gone (iam-integration group
+   * deletion): its assignments, the grants on what it owned or to it, its
+   * access settings and its changes. Identity counts it as confirmed.
+   */
+  'authorisation.group-disposed': z.strictObject({
+    groupId: id,
+    assignments: z.number().int().min(0),
+    grants: z.number().int().min(0),
+    changes: z.number().int().min(0),
+  }),
+  /** Authorisation's part of a closed tenant is gone: its custom roles and their changes. */
+  'authorisation.tenant-disposed': z.strictObject({ tenantId: id, roles: z.number().int().min(0), changes: z.number().int().min(0) }),
+  /** One maintenance run's deletions under the retention schedules (iam-integration retention): counts only. */
+  'authorisation.retention-applied': z.strictObject({ outboxEvents: z.number().int().min(0), changes: z.number().int().min(0) }),
 } as const
 
 export type AuthorisationEventType = keyof typeof payloads

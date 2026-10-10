@@ -187,6 +187,9 @@ Every event is `{ eventId, type, occurredAt, correlationId, actorPrincipalId, da
 | `authorisation.group-access-changed` | Group, tenant, the settings changed (`default-roles`, `review-interval`), the change |
 | `authorisation.review-overdue` | Principal, group, role, when it was last confirmed, when the review was due |
 | `authorisation.principal-erased` | Principal, how many assignments and grants were removed |
+| `authorisation.group-disposed` | Group, how many assignments, grants and changes were removed (§19) |
+| `authorisation.tenant-disposed` | Tenant, how many custom roles and role changes were removed (§19) |
+| `authorisation.retention-applied` | How many delivered events and decided changes were deleted, when a run deleted anything (§19) |
 
 All carry opaque identifiers, codes, role and permission names and instants only: never names, email addresses, resource attributes or free text.
 
@@ -201,6 +204,8 @@ A decision changes nothing, so a refusal is not an outbox event: `authorisation.
 - no risk level may demand less than the one below it.
 
 Dropping the phishing-resistant requirement for `critical`, for hosts without passkeys, is allowed but needs a documented risk treatment.
+
+`retention` sets how long delivered outbox events (`outboxDays`: 30 by default, 7 to 365) and decided changes (`changeDays`: 730, 365 to 2555) are kept (§19, `AUTHORISATION_RETENTION_BOUNDS`). A value below its default needs a `riskTreatment` reference.
 
 ## 10. Revocation
 
@@ -248,6 +253,7 @@ This is contract version 4, provided by package 0.4. Before 1.0, breaking change
 | `AuthorisationRoleAssignment` | Adds `expiresAt` |
 | Grant resources `{ type, id }` | Adds the optional `owningGroupId` the grant is bound to |
 | — | A group's default roles and review interval, access reviews, time-limited assignments, maintenance, role documents (§18); `exportAuthorisationData` adds the changes a principal is part of |
+| — | End of life (§19): `disposeAuthorisationGroup`, `disposeAuthorisationTenant`, `exportAuthorisationTenantData` and `AuthorisationTenantExport`; the optional legal-hold port (`AuthorisationLegalHolds`, `provideAuthorisationLegalHolds`); `retention` and `riskTreatment` in the policy; the `authorisation.group-disposed`, `authorisation.tenant-disposed` and `authorisation.retention-applied` events; `runAuthorisationMaintenance` returns `retention` counts. No change to version 4's existing types |
 
 ## 12. Storage and server functions
 
@@ -376,3 +382,15 @@ The pages meet WCAG 2.2 AA in light and dark mode; `tests/e2e` checks them with 
 **Maintenance.** `runAuthorisationMaintenance({ limit? })`, which the host schedules, removes assignments past their end, expires changes nobody decided in time, applies delayed changes whose delay or hold has ended (checking every rule again; a port failure leaves one for the next run), and announces overdue reviews. It is idempotent.
 
 **Role documents.** `exportAuthorisationRoles({ tenantId })` returns the tenant's custom roles as `{ format: 'nuxt4-layers.authorisation.roles', formatVersion: 1, tenantId, roles, digest }`, roles sorted by identifier, `digest` the SHA-256 of the canonical JSON of every other member. `importAuthorisationRoles({ tenantId, document, correlationId })` applies one after the operator's own review, in one transaction: it defines and changes the roles in the document and deletes the tenant's roles not in it. It refuses a document for another tenant (`tenant-mismatch`), a digest that does not match (`digest-mismatch`), a built-in identifier, an exact permission missing from the catalogue, deleting a role still assigned or used as a default (`role-in-use`), and a guest default that would become `high` or `critical`. It writes `authorisation.roles-imported` with the digest. Both are server-only.
+
+## 19. End of life
+
+Authorisation's part of iam-integration's [group deletion](https://github.com/nuxt4-layers/iam-integration/blob/9d84e3ee22ab9a58df79d880fdc288381b645ebd/docs/processes/group-deletion.md), [tenant lifecycle](https://github.com/nuxt4-layers/iam-integration/blob/9d84e3ee22ab9a58df79d880fdc288381b645ebd/docs/processes/tenant-lifecycle.md) and [retention](https://github.com/nuxt4-layers/iam-integration/blob/9d84e3ee22ab9a58df79d880fdc288381b645ebd/docs/processes/retention.md) processes. Each function decides nothing: the host calls it from iam-integration's adapters, which call it only when Identity says disposal is due (never while a legal hold defers it), and only after Identity has authorised an export.
+
+**Group disposal.** `disposeAuthorisationGroup({ groupId, correlationId })`, on Identity's `group.deleted` with disposal due or `group.disposal-due`, removes every role assignment in the group, every grant on a resource it owned (`owningGroupId`) or to it as a subject, its access settings (default roles, review interval) and every change in it. It writes `authorisation.group-disposed` with the counts, every time it is called, so a repeated delivery confirms again; Identity counts it once.
+
+**Tenant disposal.** `disposeAuthorisationTenant({ tenantId, correlationId })`, on `tenant.closed` with disposal due or `tenant.disposal-due`, removes the tenant's custom roles and the changes that defined or deleted them (`authorisation.tenant-disposed`). Its groups' parts go with each group's disposal.
+
+**Governance export.** `exportAuthorisationTenantData({ tenantId, groupIds, correlationId })` returns `AuthorisationTenantExport`: the tenant's custom roles as a role document (§18), and for each group Identity's part names, its assignments with provenance, the grants on what it owns, and its access settings. Server-only.
+
+**Retention.** `runAuthorisationMaintenance` also deletes delivered outbox events older than `retention.outboxDays`, and decided changes older than `retention.changeDays` whose group no legal hold covers, asking the host's legal-hold port (`provideAuthorisationLegalHolds`, from iam-integration's `legalHoldsFromMembers`). Without the port, or when it fails, it keeps every change. Assignments past their end are already removed as they lapse (§18); assignments and grants in force have no schedule. A run that deleted anything writes `authorisation.retention-applied` with counts only.

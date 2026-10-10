@@ -27,7 +27,21 @@ export interface AuthorisationPolicy {
    * personal group). Off by default: information stays inside its tenant.
    */
   externalGrants: boolean
+  /**
+   * How long records are kept once their purpose is over (iam-integration
+   * retention), in days: delivered outbox events and decided changes.
+   * Shorter than the default needs `riskTreatment`.
+   */
+  retention: Readonly<{ outboxDays: number, changeDays: number }>
+  /** Reference to the documented risk treatment for a shorter retention, or null. */
+  riskTreatment: string | null
 }
+
+/** Retention periods in days: default and hard bounds. */
+export const AUTHORISATION_RETENTION_BOUNDS = Object.freeze({
+  outboxDays: { default: 30, min: 7, max: 365 },
+  changeDays: { default: 730, min: 365, max: 2555 },
+} as const)
 
 const requirement = (minimumLevel: 'aal1' | 'aal2', phishingResistant = false, maxAuthenticationAgeSeconds: number | null = null) =>
   ({ minimumLevel, phishingResistant, maxAuthenticationAgeSeconds })
@@ -59,6 +73,8 @@ export const DEFAULT_AUTHORISATION_POLICY: AuthorisationPolicy = Object.freeze({
   }),
   personalGroupRole: 'owner',
   externalGrants: false,
+  retention: Object.freeze({ outboxDays: AUTHORISATION_RETENTION_BOUNDS.outboxDays.default, changeDays: AUTHORISATION_RETENTION_BOUNDS.changeDays.default }),
+  riskTreatment: null,
 })
 
 const levelRank = { aal1: 1, aal2: 2 } as const
@@ -87,6 +103,11 @@ const policyInputSchema = z.object({
   }).strict().optional(),
   personalGroupRole: z.enum(BUILT_IN_ROLE_IDS).nullable().optional(),
   externalGrants: z.boolean().optional(),
+  retention: z.object({
+    outboxDays: z.number().int().min(AUTHORISATION_RETENTION_BOUNDS.outboxDays.min).max(AUTHORISATION_RETENTION_BOUNDS.outboxDays.max).optional(),
+    changeDays: z.number().int().min(AUTHORISATION_RETENTION_BOUNDS.changeDays.min).max(AUTHORISATION_RETENTION_BOUNDS.changeDays.max).optional(),
+  }).strict().optional(),
+  riskTreatment: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:/#-]{0,63}$/).nullable().optional(),
 }).strict()
 
 export type AuthorisationPolicyInput = z.input<typeof policyInputSchema>
@@ -129,10 +150,20 @@ export function resolveAuthorisationPolicy(input: AuthorisationPolicyInput = {})
     }
   }
 
+  const retention = { ...defaults.retention, ...parsed.retention }
+  const riskTreatment = parsed.riskTreatment ?? null
+  for (const key of ['outboxDays', 'changeDays'] as const) {
+    if (retention[key] < AUTHORISATION_RETENTION_BOUNDS[key].default && !riskTreatment) {
+      throw new TypeError(`Authorisation policy: retention.${key} below its default needs a riskTreatment reference.`)
+    }
+  }
+
   return Object.freeze({
     assurance: Object.freeze(assurance),
     roles: Object.freeze({ ...defaults.roles, ...parsed.roles }),
     personalGroupRole: parsed.personalGroupRole === undefined ? defaults.personalGroupRole : parsed.personalGroupRole,
     externalGrants: parsed.externalGrants ?? defaults.externalGrants,
+    retention: Object.freeze(retention),
+    riskTreatment,
   })
 }

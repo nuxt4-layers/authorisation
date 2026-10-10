@@ -503,6 +503,61 @@ export function createStore(db: Queryable, schema: string) {
      * `assigned_by`, `granted_by` and pending changes (anonymisation by
      * unlinking).
      */
+    /**
+     * Authorisation's part of a deleted group (iam-integration group
+     * deletion): its assignments, the grants on what it owned and to it as a
+     * subject, its access settings and every change in it.
+     */
+    async disposeGroup(groupId: string): Promise<{ assignments: number, grants: number, changes: number }> {
+      const { rows } = await query<{ assignments: string, grants: string, changes: string }>(
+        `with assignments as (delete from ${s}."role_assignment" where group_id = $1 returning 1),
+              grants as (delete from ${s}."grant" where owning_group_id = $1 or (subject_kind = 'group' and subject_id = $1) returning 1),
+              access as (delete from ${s}."group_access" where group_id = $1 returning 1),
+              changes as (delete from ${s}."pending_change" where group_id = $1 returning 1)
+         select (select count(*) from assignments) as assignments, (select count(*) from grants) as grants, (select count(*) from changes) as changes`,
+        [groupId],
+      )
+      return { assignments: Number(rows[0]?.assignments ?? 0), grants: Number(rows[0]?.grants ?? 0), changes: Number(rows[0]?.changes ?? 0) }
+    },
+
+    /** Authorisation's part of a closed tenant: its custom roles and the changes that defined or deleted them. */
+    async disposeTenant(tenantId: string): Promise<{ roles: number, changes: number }> {
+      const { rows } = await query<{ roles: string, changes: string }>(
+        `with roles as (delete from ${s}."custom_role" where tenant_id = $1 returning 1),
+              changes as (delete from ${s}."pending_change" where tenant_id = $1 and type in ('role.define', 'role.delete') returning 1)
+         select (select count(*) from roles) as roles, (select count(*) from changes) as changes`,
+        [tenantId],
+      )
+      return { roles: Number(rows[0]?.roles ?? 0), changes: Number(rows[0]?.changes ?? 0) }
+    },
+
+    /** Delivered outbox events older than `before`. */
+    async deleteDeliveredEvents(before: Date): Promise<number> {
+      const { rows } = await query<{ n: string }>(
+        `with gone as (delete from ${s}."outbox" where published_at is not null and published_at <= $1 returning 1) select count(*) as n from gone`,
+        [before.toISOString()],
+      )
+      return Number(rows[0]?.n ?? 0)
+    },
+
+    /** Changes decided before `before`, oldest first: candidates for retention. */
+    async decidedBefore(before: Date, limit: number): Promise<{ changeId: string, groupId: string }[]> {
+      const { rows } = await query<{ change_id: string, group_id: string }>(
+        `select change_id, group_id from ${s}."pending_change" where decided_at is not null and decided_at <= $1 order by decided_at, change_id limit $2`,
+        [before.toISOString(), limit],
+      )
+      return rows.map(row => ({ changeId: row.change_id, groupId: row.group_id }))
+    },
+
+    async deleteChanges(changeIds: readonly string[]): Promise<number> {
+      if (changeIds.length === 0) return 0
+      const { rows } = await query<{ n: string }>(
+        `with gone as (delete from ${s}."pending_change" where change_id = any ($1::uuid[]) returning 1) select count(*) as n from gone`,
+        [changeIds],
+      )
+      return Number(rows[0]?.n ?? 0)
+    },
+
     async erasePrincipal(principalId: string): Promise<{ assignments: number, grants: number }> {
       const { rows } = await query<{ assignments: string, grants: string }>(
         `with assignments as (delete from ${s}."role_assignment" where principal_id = $1 returning 1),
