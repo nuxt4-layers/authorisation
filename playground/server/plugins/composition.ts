@@ -33,7 +33,7 @@ export default defineNitroPlugin(() => {
 
   provideAuthorisationEventSink({
     emit(event) {
-      console.info(`[playground events] ${event.type}`, { actorPrincipalId: event.actorPrincipalId, reason: event.reason })
+      console.info(`[playground denials] ${event.type}`, { actorPrincipalId: event.actorPrincipalId, reason: event.reason })
     },
   })
 })

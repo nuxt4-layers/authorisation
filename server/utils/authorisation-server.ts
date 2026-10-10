@@ -11,7 +11,6 @@ import type {
   AuthorisationTenantRoles,
   AuthorisationDataExport,
   AuthorisationDecision,
-  AuthorisationErrorBody,
   AuthorisationEventPublisher,
   AuthorisationErrorCode,
   AuthorisationGrant,
@@ -20,10 +19,11 @@ import type {
   AuthorisationRoleAssignmentScope,
   AuthorisationRoleDefinition,
 } from '../../contracts'
-import { AUTHORISATION_ERROR_STATUS, AuthorisationFailure } from '../../contracts'
+import { AuthorisationFailure } from '../../contracts'
 import { runAuthorisationMigrations } from '../database/migrations'
 import { timeFrom } from '../internal/clock'
 import { createDatabase } from '../internal/database'
+import { authorisationHttpError } from '../internal/http'
 import type { RelayResult } from '../internal/outbox'
 import { relayOutbox } from '../internal/outbox'
 import { createAdministration } from '../internal/administration'
@@ -175,10 +175,7 @@ export async function authorise(input: AuthoriseInput): Promise<AuthorisationDec
   return (await service()).authorise(input)
 }
 
-function httpError(code: AuthorisationErrorCode) {
-  const data: AuthorisationErrorBody = { code, messageKey: `authorisation.error.${code}` }
-  return createError({ statusCode: AUTHORISATION_ERROR_STATUS[code], statusMessage: code, data })
-}
+const httpError = (code: AuthorisationErrorCode) => authorisationHttpError(code)
 
 /**
  * As `authorise`, but throws a coarse HTTP error unless allowed: `forbidden`
