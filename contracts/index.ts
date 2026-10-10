@@ -11,6 +11,25 @@
  */
 
 // ---------------------------------------------------------------------------
+// Identifiers, codes, instants and digests
+// ---------------------------------------------------------------------------
+
+export {
+  canonicalJson,
+  correlationIdSchema,
+  IDENTIFIER_PATTERN,
+  identifierSchema,
+  instantSchema,
+  justificationReferenceSchema,
+  REASON_CODE_PATTERN,
+  reasonCodeSchema,
+  sha256DigestSchema,
+  UUID_PATTERN,
+  uuidSchema,
+  versionSchema,
+} from '../shared/identifiers'
+
+// ---------------------------------------------------------------------------
 // Subject (who is asking)
 // ---------------------------------------------------------------------------
 
@@ -29,6 +48,7 @@ export type {
   AuthorisationPermissionCatalogue,
   AuthorisationPermissionDefinition,
   AuthorisationPermissionDefinitionInput,
+  AuthorisationAdministrationPermission,
   AuthorisationPermissionEffect,
   AuthorisationRiskLevel,
 } from '../shared/permissions'
@@ -36,6 +56,7 @@ export {
   AUTHORISATION_PERMISSION_EFFECTS,
   AUTHORISATION_PERMISSIONS,
   AUTHORISATION_RISK_LEVELS,
+  higherRisk,
   isPermissionName,
   isPermissionPattern,
   permissionDefinitionSchema,
@@ -111,8 +132,78 @@ export {
 // Events
 // ---------------------------------------------------------------------------
 
-export type { AuthorisationEvent, AuthorisationEventType } from '../shared/events'
-export { AUTHORISATION_EVENT_TYPES } from '../shared/events'
+export type { AuthorisationDenialEvent, AuthorisationEvent, AuthorisationEventType } from '../shared/events'
+export { AUTHORISATION_EVENT_PAYLOADS, AUTHORISATION_EVENT_TYPES, authorisationEventSchema } from '../shared/events'
+
+// ---------------------------------------------------------------------------
+// Changes and approvals (access administration)
+// ---------------------------------------------------------------------------
+
+export type {
+  AuthorisationApprovalRecord,
+  AuthorisationApprovalRefusal,
+  AuthorisationApprovalRequirement,
+  AuthorisationApprovalRoute,
+  AuthorisationAssuranceRecord,
+  AuthorisationChangeRefusal,
+  AuthorisationChangeRequest,
+  AuthorisationChangeState,
+  AuthorisationChangeTarget,
+  AuthorisationChangeType,
+  AuthorisationDefaultRoles,
+  AuthorisationJustification,
+  AuthorisationPendingChange,
+  AuthorisationRequiredApprovers,
+} from '../shared/changes'
+export {
+  APPROVAL_REFUSALS,
+  approvalRecordSchema,
+  approvalRequirement,
+  assignmentRisk,
+  assuranceRecordSchema,
+  AUTHORISATION_APPROVAL_ROUTES,
+  AUTHORISATION_CHANGE_STATES,
+  AUTHORISATION_CHANGE_TARGETS,
+  AUTHORISATION_CHANGE_TYPES,
+  AUTHORISATION_CHANGES,
+  CHANGE_REFUSALS,
+  changeRequestSchema,
+  chooseRoute,
+  DEFAULT_GROUP_DEFAULT_ROLES,
+  defaultRolesSchema,
+  isSelfGrant,
+  justificationSchema,
+  meetsStepUp,
+  OPEN_CHANGE_STATES,
+  pendingChangeSchema,
+  refuseApproval,
+  REVIEW_INTERVAL_DAYS,
+  roleRisk,
+  STEP_UP_REQUIREMENTS,
+} from '../shared/changes'
+
+// ---------------------------------------------------------------------------
+// Administration views and role documents
+// ---------------------------------------------------------------------------
+
+export type {
+  AuthorisationAccessReview,
+  AuthorisationAccessReviewEntry,
+  AuthorisationAssignmentView,
+  AuthorisationGrantView,
+  AuthorisationGroupAccess,
+  AuthorisationRoleDocument,
+  AuthorisationRoleView,
+  AuthorisationSelfView,
+  AuthorisationTenantRoles,
+} from '../shared/administration'
+export {
+  AUTHORISATION_API_PREFIX,
+  AUTHORISATION_CORRELATION_HEADER,
+  AUTHORISATION_ROLE_DOCUMENT_FORMAT,
+  AUTHORISATION_ROLE_DOCUMENT_VERSION,
+  roleDocumentSchema,
+} from '../shared/administration'
 
 // ---------------------------------------------------------------------------
 // Policy
@@ -131,7 +222,12 @@ export type {
   AuthorisationDirectory,
   AuthorisationDirectoryConsistency,
   AuthorisationDirectoryReadOptions,
+  AuthorisationEventPublisher,
   AuthorisationEventSink,
+  AuthorisationGovernance,
+  AuthorisationGovernedGroup,
+  AuthorisationSafetyPeriods,
+  AuthorisationSubjectResolver,
   PostgresPoolLike,
 } from '../shared/ports'
 export { AUTHORISATION_MAX_STALENESS_SECONDS } from '../shared/ports'

@@ -1,12 +1,12 @@
 {
   "schemaVersion": "1",
   "name": "@nuxt4-layers/authorisation",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "classification": "foundation",
   "provides": [
     {
       "capability": "Authorisation",
-      "contractVersion": "3"
+      "contractVersion": "4"
     }
   ],
   "requires": [
@@ -20,7 +20,7 @@
       "capability": "Identity",
       "contractVersion": "1",
       "optional": false,
-      "purpose": "groups, lineage, tenants and membership status, adapted by the host to the AuthorisationDirectory port"
+      "purpose": "groups, lineage, tenants and membership status, adapted by the host to the AuthorisationDirectory port; approval requirements, safety periods, owners and recovery holds through the AuthorisationGovernance port"
     }
   ],
   "publicExports": [
@@ -40,6 +40,14 @@
     {
       "port": "AuthorisationEventSink",
       "optional": true
+    },
+    {
+      "port": "AuthorisationGovernance",
+      "optional": false
+    },
+    {
+      "port": "AuthorisationSubjectResolver",
+      "optional": false
     },
     {
       "port": "AuthorisationPermissions",

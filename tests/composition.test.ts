@@ -1,35 +1,37 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { AuthorisationEvent } from '../contracts'
+import type { AuthorisationDenialEvent } from '../contracts'
 import { AuthorisationCompositionError, AuthorisationFailure, DEFAULT_AUTHORISATION_POLICY } from '../contracts'
 import { timeFrom } from '../server/internal/clock'
 import {
   clearAuthorisationComposition,
-  emitAuthorisationEvent,
+  emitAuthorisationDenial,
   provideAuthorisationClock,
   provideAuthorisationDatabase,
   provideAuthorisationDirectory,
   provideAuthorisationEventSink,
+  provideAuthorisationGovernance,
   provideAuthorisationPermissions,
+  provideAuthorisationSubjectResolver,
   provideAuthorisationPolicy,
   useAuthorisationCatalogue,
   useAuthorisationClock,
   useAuthorisationDatabase,
   useAuthorisationDirectory,
+  useAuthorisationGovernance,
   useAuthorisationPolicy,
+  useAuthorisationSubjectResolver,
 } from '../server/utils/authorisation-composition'
 
 const pool = { query: vi.fn(), connect: vi.fn(), end: vi.fn() }
 const directory = { resolveActor: vi.fn(), describeGroup: vi.fn() }
 
-const event: AuthorisationEvent = {
+const event: AuthorisationDenialEvent = {
   type: 'authorisation.denied',
   occurredAt: '2026-10-08T12:00:00.000Z',
   actorPrincipalId: 'principal-1',
-  subjectPrincipalId: null,
   groupId: 'group-1',
   resource: { type: 'orders', id: 'order-1' },
   permission: 'orders:view',
-  roleId: null,
   reason: 'not-permitted',
 }
 
@@ -62,6 +64,21 @@ describe('Authorisation composition ports', () => {
   ])('rejects %s', (_label, input) => {
     expect(() => provideAuthorisationDatabase(input as never)).toThrow(TypeError)
     expect(() => useAuthorisationDatabase()).toThrow(AuthorisationCompositionError)
+  })
+
+  it('fails closed when the governance port or the subject resolver is absent, and refuses malformed ones', () => {
+    expect(() => useAuthorisationGovernance()).toThrow(/AuthorisationGovernance/)
+    expect(() => useAuthorisationSubjectResolver()).toThrow(/AuthorisationSubjectResolver/)
+    expect(() => provideAuthorisationGovernance({ describeGroup: vi.fn(), isOwner: vi.fn() } as never)).toThrow(TypeError)
+    expect(() => provideAuthorisationSubjectResolver({} as never)).toThrow(TypeError)
+    const governance = { describeGroup: vi.fn(), isOwner: vi.fn(), countOwners: vi.fn() }
+    const resolver = { resolve: vi.fn() }
+    provideAuthorisationGovernance(governance)
+    provideAuthorisationSubjectResolver(resolver)
+    expect(useAuthorisationGovernance()).toBe(governance)
+    expect(useAuthorisationSubjectResolver()).toBe(resolver)
+    clearAuthorisationComposition()
+    expect(() => useAuthorisationGovernance()).toThrow(AuthorisationCompositionError)
   })
 
   it('supplies the directory', () => {
@@ -131,20 +148,20 @@ describe('Authorisation permission catalogue', () => {
 
 describe('Authorisation events', () => {
   it('treats a missing event sink as a no-op', async () => {
-    await expect(emitAuthorisationEvent(event)).resolves.toBeUndefined()
+    await expect(emitAuthorisationDenial(event)).resolves.toBeUndefined()
   })
 
   it('delivers events to the supplied sink', async () => {
     const emit = vi.fn()
     provideAuthorisationEventSink({ emit })
-    await emitAuthorisationEvent(event)
+    await emitAuthorisationDenial(event)
     expect(emit).toHaveBeenCalledWith(event)
   })
 
   it('never lets a failing event sink change the operation outcome', async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
     provideAuthorisationEventSink({ emit: () => Promise.reject(new Error('sink down')) })
-    await expect(emitAuthorisationEvent(event)).resolves.toBeUndefined()
+    await expect(emitAuthorisationDenial(event)).resolves.toBeUndefined()
     expect(error).toHaveBeenCalledOnce()
     expect(String(error.mock.calls[0])).toContain('authorisation.denied')
   })

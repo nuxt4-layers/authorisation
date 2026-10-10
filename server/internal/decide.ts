@@ -38,8 +38,10 @@ import { BUILT_IN_ROLE_IDS, permissionPatternMatches } from '../../contracts'
  *    `group-and-descendants` scope.
  * 5. A principal holds the policy's personal-group role in their own personal
  *    group. Creator provenance never grants access by itself.
- * 6. A grant counts until it expires, and stays inside the resource's tenant
- *    unless the policy allows external grants.
+ * 6. A grant counts until it expires, only for the owning group it was made
+ *    for (when bound to one), and stays inside the resource's tenant unless
+ *    the policy allows external grants. A time-limited role assignment
+ *    counts until its end.
  * 7. Wildcards never cover `high` or `critical` permissions.
  * 8. A permitted action still needs the session assurance its risk demands.
  */
@@ -157,9 +159,13 @@ function findSource(
     if (standing && (!best || STANDING_RANK[standing] > STANDING_RANK[best.standing])) best = { via, standing }
   }
 
+  const now = facts.now.getTime()
+
   // Roles held in the owning group, or in an ancestor when explicitly scoped to descendants.
   for (const a of facts.assignments) {
     if (a.principalId !== subject.principalId) continue
+    // A time-limited assignment past its end confers nothing, whether or not maintenance has removed it.
+    if (a.expiresAt != null && !(Date.parse(a.expiresAt) > now)) continue
     if (a.groupId !== group.groupId && !(a.scope === 'group-and-descendants' && group.lineage.includes(a.groupId))) continue
     const standing = inResourceTenant(a.groupId)
     if (standing && covers(findRole(a.roleId, group.tenantId, facts))) consider('role', standing)
@@ -171,9 +177,10 @@ function findSource(
   }
 
   // Grants on this resource, inside its tenant unless external grants are allowed.
-  const now = facts.now.getTime()
   for (const grant of facts.grants) {
     if (grant.resource.type !== resource.type || grant.resource.id !== resource.id) continue
+    // A grant bound to an owning group counts only while that group owns the resource, as its capability describes it now.
+    if (grant.resource.owningGroupId && grant.resource.owningGroupId !== resource.owningGroupId) continue
     if (!grant.permissions.includes(definition.name)) continue
     if (grant.expiresAt !== null && !(Date.parse(grant.expiresAt) > now)) continue
     if (grant.subject.kind === 'group') {

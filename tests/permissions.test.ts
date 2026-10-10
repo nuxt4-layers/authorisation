@@ -41,9 +41,17 @@ describe('Permission definitions', () => {
     for (const { name, risk, effect } of AUTHORISATION_PERMISSIONS) {
       expect(name).toMatch(/^authorisation\./)
       expect(permissionDefinitionSchema.parse({ name, description: 'x', risk, effect })).toBeTruthy()
-      if (!name.endsWith(':view')) expect(['high', 'critical']).toContain(risk)
+      // Assignments are the one medium floor: each assignment's own risk, from its role, sets its approval and step-up.
+      if (!name.endsWith(':view')) expect(name === 'authorisation.role-assignments:manage' ? ['medium'] : ['high', 'critical']).toContain(risk)
       expect(effect).toBe(name.endsWith(':view') ? 'view' : 'change')
     }
+    expect(Object.fromEntries(AUTHORISATION_PERMISSIONS.map(p => [p.name, p.risk]))).toEqual({
+      'authorisation.roles:view': 'low',
+      'authorisation.grants:manage': 'high',
+      'authorisation.role-assignments:manage': 'medium',
+      'authorisation.roles:manage': 'critical',
+      'authorisation.group-access:manage': 'high',
+    })
   })
 
   it('takes an effect of view or change, and change when none is declared', () => {

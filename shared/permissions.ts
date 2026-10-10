@@ -101,6 +101,21 @@ export type AuthorisationPermissionCatalogue = ReadonlyMap<string, Authorisation
 export const AUTHORISATION_PERMISSIONS: readonly AuthorisationPermissionDefinition[] = [
   { name: 'authorisation.roles:view', description: 'See the roles defined in a group and who holds them', risk: 'low', effect: 'view' },
   { name: 'authorisation.grants:manage', description: 'Share or stop sharing a resource with a user or group', risk: 'high', effect: 'change' },
-  { name: 'authorisation.role-assignments:manage', description: 'Give members roles in a group, or take them away', risk: 'critical', effect: 'change' },
-  { name: 'authorisation.roles:manage', description: 'Define, change or delete a group\'s custom roles', risk: 'critical', effect: 'change' },
+  // The floor for any assignment (contract 4): each change's own risk, from the role it assigns, sets its approval and step-up.
+  { name: 'authorisation.role-assignments:manage', description: 'Give members roles in a group, take them away, and confirm them in an access review', risk: 'medium', effect: 'change' },
+  { name: 'authorisation.roles:manage', description: 'Define, change or delete a tenant\'s custom roles', risk: 'critical', effect: 'change' },
+  { name: 'authorisation.group-access:manage', description: 'Set a group\'s default roles and its access review interval', risk: 'high', effect: 'change' },
 ]
+
+/** The permission each of Authorisation's own administration permissions is called by. */
+export type AuthorisationAdministrationPermission =
+  | 'authorisation.roles:view'
+  | 'authorisation.grants:manage'
+  | 'authorisation.role-assignments:manage'
+  | 'authorisation.roles:manage'
+  | 'authorisation.group-access:manage'
+
+/** The higher of two risk levels. */
+export function higherRisk(a: AuthorisationRiskLevel, b: AuthorisationRiskLevel): AuthorisationRiskLevel {
+  return AUTHORISATION_RISK_LEVELS.indexOf(a) >= AUTHORISATION_RISK_LEVELS.indexOf(b) ? a : b
+}

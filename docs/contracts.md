@@ -1,4 +1,4 @@
-# Authorisation Contract (version 3)
+# Authorisation Contract (version 4)
 
 `@nuxt4-layers/authorisation/contracts` is the only supported import path for this capability's types and pure helpers. It imports nothing but `zod`, and no driver or other capability's package.
 
@@ -208,6 +208,8 @@ This is contract version 3, provided by package 0.3. Before 1.0, breaking change
 | Denial reasons | Adds `paused` |
 | — | Adds `exportAuthorisationData`, `eraseAuthorisationPrincipal`, `AuthorisationDataExport` and the `authorisation.principal-erased` event, for data-subject requests and account closure; no change to version 3's types |
 | — | Adds the optional clock port (`AuthorisationClock`, `provideAuthorisationClock`, §13); without it, the system clock as before. No change to version 3's types |
+
+Version 4 (access administration) is being built in stages; its full description follows when the stages are complete. So far: `authorisation.role-assignments:manage` is `medium` (the floor of any assignment), `authorisation.group-access:manage` (`high`) is new, the `conflict` error code, pending-change, event-outbox, governance-port and subject-resolver types, `expiresAt` on assignments and `owningGroupId` on grants.
 
 ## 12. Storage and server functions
 

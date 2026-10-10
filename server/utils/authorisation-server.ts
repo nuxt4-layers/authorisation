@@ -2,6 +2,7 @@ import type {
   AuthorisationDataExport,
   AuthorisationDecision,
   AuthorisationErrorBody,
+  AuthorisationEventPublisher,
   AuthorisationErrorCode,
   AuthorisationGrant,
   AuthorisationResource,
@@ -11,11 +12,14 @@ import type {
 } from '../../contracts'
 import { AUTHORISATION_ERROR_STATUS, AuthorisationFailure } from '../../contracts'
 import { runAuthorisationMigrations } from '../database/migrations'
+import { timeFrom } from '../internal/clock'
+import { createDatabase } from '../internal/database'
+import type { RelayResult } from '../internal/outbox'
+import { relayOutbox } from '../internal/outbox'
 import type { AuthoriseInput } from '../internal/service'
 import { createService } from '../internal/service'
-import { createStore } from '../internal/store'
 import {
-  emitAuthorisationEvent,
+  emitAuthorisationDenial,
   useAuthorisationCatalogue,
   useAuthorisationClock,
   useAuthorisationDatabase,
@@ -55,11 +59,12 @@ async function service() {
   if (migration) await migration.catch(() => { throw new AuthorisationFailure('unavailable', 'migrations failed') })
   const database = useAuthorisationDatabase()
   return createService({
-    store: createStore(database.pool, database.schema),
+    db: createDatabase(database.pool, database.schema),
+    schemaName: database.schema,
     directory: useAuthorisationDirectory(),
     catalogue: useAuthorisationCatalogue(),
     policy: useAuthorisationPolicy(),
-    emit: emitAuthorisationEvent,
+    emitDenial: emitAuthorisationDenial,
     // Read at each use, so every time comes from the host's clock (or the system clock).
     now: () => useAuthorisationClock().now(),
   })
@@ -104,30 +109,35 @@ export async function listAuthorisationRoleAssignments(input: { principalId?: st
   return (await service()).listAssignments(input)
 }
 
-/** Gives a principal a role in a group. Returns whether anything changed. Decides nothing. */
-export async function assignAuthorisationRole(input: { principalId: string, groupId: string, roleId: string, scope?: AuthorisationRoleAssignmentScope, actorPrincipalId: string }): Promise<boolean> {
+/**
+ * Gives a principal a role in a group, optionally until `expiresAt`. Returns
+ * whether anything changed. Decides nothing: for the host's own server code
+ * (owners and default roles from Identity's events). Written with its
+ * `authorisation.role-assigned` event through the outbox.
+ */
+export async function assignAuthorisationRole(input: { principalId: string, groupId: string, roleId: string, scope?: AuthorisationRoleAssignmentScope, expiresAt?: string | null, actorPrincipalId: string, correlationId?: string }): Promise<boolean> {
   return (await service()).assign(input)
 }
 
 /** Takes a role, or with `roleId: null` every role, from a principal in a group. Returns the roles removed. Decides nothing. */
-export async function unassignAuthorisationRole(input: { principalId: string, groupId: string, roleId: string | null, actorPrincipalId: string }): Promise<string[]> {
+export async function unassignAuthorisationRole(input: { principalId: string, groupId: string, roleId: string | null, actorPrincipalId: string, correlationId?: string }): Promise<string[]> {
   return (await service()).unassign(input)
 }
 
-export async function defineAuthorisationRole(input: { tenantId: string, role: AuthorisationRoleDefinition, actorPrincipalId: string }): Promise<'defined' | 'changed'> {
+export async function defineAuthorisationRole(input: { tenantId: string, role: AuthorisationRoleDefinition, actorPrincipalId: string, correlationId?: string }): Promise<'defined' | 'changed'> {
   return (await service()).defineRole(input)
 }
 
-export async function deleteAuthorisationRole(input: { tenantId: string, roleId: string, actorPrincipalId: string }): Promise<boolean> {
+export async function deleteAuthorisationRole(input: { tenantId: string, roleId: string, actorPrincipalId: string, correlationId?: string }): Promise<boolean> {
   return (await service()).deleteRole(input)
 }
 
 /** Shares a resource; returns the grant's identifier. Decides nothing. */
-export async function createAuthorisationGrant(input: { grant: AuthorisationGrant, actorPrincipalId: string }): Promise<string> {
+export async function createAuthorisationGrant(input: { grant: AuthorisationGrant, actorPrincipalId: string, correlationId?: string }): Promise<string> {
   return (await service()).createGrant(input)
 }
 
-export async function revokeAuthorisationGrant(input: { grantId: string, actorPrincipalId: string }): Promise<boolean> {
+export async function revokeAuthorisationGrant(input: { grantId: string, actorPrincipalId: string, correlationId?: string }): Promise<boolean> {
   return (await service()).revokeGrant(input)
 }
 
@@ -148,6 +158,25 @@ export async function exportAuthorisationData(input: { principalId: string, corr
  * Authorisation's part. Decides nothing; idempotent. Announced as
  * `authorisation.principal-erased`. Returns how many were removed.
  */
-export async function eraseAuthorisationPrincipal(input: { principalId: string, actorPrincipalId: string }): Promise<{ assignments: number, grants: number }> {
+export async function eraseAuthorisationPrincipal(input: { principalId: string, actorPrincipalId: string, correlationId?: string }): Promise<{ assignments: number, grants: number }> {
   return (await service()).erasePrincipal(input)
+}
+
+/**
+ * Publishes up to `limit` (1 to 1000) of the outbox's events, in order,
+ * through `publish`; each is marked relayed only when `publish` resolves. A
+ * failure stops the run, and the event is published again next time (at
+ * least once). The host runs it on a schedule, or after each request.
+ */
+export async function relayAuthorisationOutbox(input: { publish: AuthorisationEventPublisher['publish'], limit?: number }): Promise<RelayResult> {
+  if (migration) await migration.catch(() => { throw new AuthorisationFailure('unavailable', 'migrations failed') })
+  const database = useAuthorisationDatabase()
+  const clock = useAuthorisationClock()
+  try {
+    return await relayOutbox(createDatabase(database.pool, database.schema), { publish: input.publish }, input.limit ?? 100, () => timeFrom(clock))
+  }
+  catch (error) {
+    if (error instanceof AuthorisationFailure) throw error
+    throw new AuthorisationFailure('unavailable', 'outbox relay failed')
+  }
 }
