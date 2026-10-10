@@ -67,3 +67,17 @@ export interface AuthorisationDirectory {
 export interface AuthorisationEventSink {
   emit(event: AuthorisationEvent): void | Promise<void>
 }
+
+/**
+ * Clock port (docs/contracts.md, "Time"; iam-integration architecture §7):
+ * the current time. Optional; without it Authorisation uses the system
+ * clock. Every time Authorisation keeps or judges comes from it: grant
+ * expiry, the age of an authentication for a permission that needs a recent
+ * one, the times it records and events' `occurredAt`. Trusted like a key,
+ * since it can keep an expired grant alive or make an old sign-in look
+ * recent. An answer that is not a valid `Date`, or a failure, fails the
+ * operation closed as `unavailable`: never a decision on another time.
+ */
+export interface AuthorisationClock {
+  now(): Date
+}

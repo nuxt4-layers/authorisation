@@ -126,6 +126,7 @@ export { DEFAULT_AUTHORISATION_POLICY, resolveAuthorisationPolicy } from '../sha
 // ---------------------------------------------------------------------------
 
 export type {
+  AuthorisationClock,
   AuthorisationDatabase,
   AuthorisationDirectory,
   AuthorisationDirectoryConsistency,

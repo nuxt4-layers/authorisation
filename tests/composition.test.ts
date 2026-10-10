@@ -1,15 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AuthorisationEvent } from '../contracts'
-import { AuthorisationCompositionError, DEFAULT_AUTHORISATION_POLICY } from '../contracts'
+import { AuthorisationCompositionError, AuthorisationFailure, DEFAULT_AUTHORISATION_POLICY } from '../contracts'
+import { timeFrom } from '../server/internal/clock'
 import {
   clearAuthorisationComposition,
   emitAuthorisationEvent,
+  provideAuthorisationClock,
   provideAuthorisationDatabase,
   provideAuthorisationDirectory,
   provideAuthorisationEventSink,
   provideAuthorisationPermissions,
   provideAuthorisationPolicy,
   useAuthorisationCatalogue,
+  useAuthorisationClock,
   useAuthorisationDatabase,
   useAuthorisationDirectory,
   useAuthorisationPolicy,
@@ -144,5 +147,33 @@ describe('Authorisation events', () => {
     await expect(emitAuthorisationEvent(event)).resolves.toBeUndefined()
     expect(error).toHaveBeenCalledOnce()
     expect(String(error.mock.calls[0])).toContain('authorisation.denied')
+  })
+})
+
+describe('Authorisation clock', () => {
+  it('uses the system clock when the host supplies none, and the host\'s clock when it does', () => {
+    const before = Date.now()
+    const now = timeFrom(useAuthorisationClock())
+    expect(now.getTime()).toBeGreaterThanOrEqual(before)
+    expect(now.getTime()).toBeLessThanOrEqual(Date.now())
+    expect(() => provideAuthorisationClock({} as never)).toThrow(TypeError)
+    provideAuthorisationClock({ now: () => new Date('2030-01-02T03:04:05Z') })
+    expect(timeFrom(useAuthorisationClock()).toISOString()).toBe('2030-01-02T03:04:05.000Z')
+    clearAuthorisationComposition()
+    expect(Math.abs(timeFrom(useAuthorisationClock()).getTime() - Date.now())).toBeLessThan(1000)
+  })
+
+  it('fails closed on a clock that throws or answers anything but a valid Date', () => {
+    for (const now of [() => new Date(Number.NaN), () => Date.now() as unknown as Date, () => null as unknown as Date, () => { throw new Error('down') }]) {
+      let failure: unknown
+      try {
+        timeFrom({ now })
+      }
+      catch (error) {
+        failure = error
+      }
+      expect(failure).toBeInstanceOf(AuthorisationFailure)
+      expect((failure as AuthorisationFailure).code).toBe('unavailable')
+    }
   })
 })

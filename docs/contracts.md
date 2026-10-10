@@ -153,7 +153,7 @@ Approvals (`authorisationQualifies`) use the same decision, so a paused member n
 | `forbidden` | 403 | Refused. Never says why, or whether the resource or group exists |
 | `insufficient-assurance` | 403 | Permitted after step-up or re-authentication |
 | `validation-failed` | 400 | Malformed input |
-| `unavailable` | 503 | Directory or database failure. Fails closed |
+| `unavailable` | 503 | Directory, database or clock failure (§13). Fails closed |
 
 A `paused` refusal is `forbidden` over HTTP like any other; the host may tell the signed-in person, from their own state, that resuming lets them act.
 
@@ -207,6 +207,7 @@ This is contract version 3, provided by package 0.3. Before 1.0, breaking change
 | Permission definitions: name, description, risk | Adds `effect: 'view' \| 'change'` (default `change`); `AuthorisationPermissionDefinitionInput` is the declared shape, `AuthorisationPermissionDefinition` the catalogue's |
 | Denial reasons | Adds `paused` |
 | — | Adds `exportAuthorisationData`, `eraseAuthorisationPrincipal`, `AuthorisationDataExport` and the `authorisation.principal-erased` event, for data-subject requests and account closure; no change to version 3's types |
+| — | Adds the optional clock port (`AuthorisationClock`, `provideAuthorisationClock`, §13); without it, the system clock as before. No change to version 3's types |
 
 ## 12. Storage and server functions
 
@@ -227,4 +228,13 @@ Authorisation keeps custom roles (per tenant), role assignments (principal, grou
 
 The functions that change roles, assignments and grants **decide nothing**: their caller has authorised the change. Today that is the host applying Identity's events through iam-integration's adapters (owners hold the `owner` role, members the group's default role); the layer's own administration endpoints, guarded by its `authorisation.*` permissions, are phase 3.
 
-Every function fails closed: a directory or database failure throws `AuthorisationFailure` with code `unavailable`, and invalid input `validation-failed`.
+Every function fails closed: a directory, database or clock failure (§13) throws `AuthorisationFailure` with code `unavailable`, and invalid input `validation-failed`.
+
+## 13. Time
+
+Authorisation reads the current time from the clock the host supplies (`provideAuthorisationClock({ now })`), as iam-integration's architecture §7 asks of every member; without one, it uses the system clock. A host supplies the same clock to every member, or none.
+
+- Every time Authorisation keeps or judges comes from the clock: whether a grant has expired (`expiresAt`, at each decision and when a grant is made), whether an authentication is recent enough for the permission's risk (`maxAuthenticationAgeSeconds`), the times it records (`created_at` of assignments, custom roles and grants; a custom role's `updated_at`), events' `occurredAt` and an export's `exportedAt`. The database judges no time of its own: each such time is passed to it from the clock.
+- The clock is read once per decision, before anything else, and that one time decides the whole decision.
+- A clock that throws, or answers anything but a valid `Date`, fails the operation as `unavailable`: the decision is refused, and nothing is read, written or announced. Authorisation never falls back to another time.
+- The clock is trusted like a key: whoever supplies it can keep an expired grant alive or make an old sign-in look recent. Only the host composes it, from server code; no request can set or move it. A clock that can be moved is for tests only.

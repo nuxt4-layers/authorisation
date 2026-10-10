@@ -14,6 +14,7 @@ import type {
   AuthorisationSubject,
 } from '../../contracts'
 import { AuthorisationFailure, BUILT_IN_ROLE_IDS, ROLE_ASSIGNMENT_SCOPES, isPermissionName, roleDefinitionSchema } from '../../contracts'
+import { timeFrom } from './clock'
 import { decideAuthorisation } from './decide'
 import type { AuthorisationStore, StoredGrant } from './store'
 
@@ -30,6 +31,7 @@ export interface ServiceDependencies {
   catalogue: AuthorisationPermissionCatalogue
   policy: AuthorisationPolicy
   emit: (event: AuthorisationEvent) => Promise<void>
+  /** The host's clock (or the system clock); every time Authorisation keeps or judges comes from it. */
   now?: () => Date
 }
 
@@ -49,7 +51,11 @@ function requireIdentifier(value: unknown, what: string): string {
   return value
 }
 
-export function createService({ store, directory, catalogue, policy, emit, now = () => new Date() }: ServiceDependencies) {
+export function createService({ store, directory, catalogue, policy, emit, now: clockNow = () => new Date() }: ServiceDependencies) {
+  /** The clock's time; an invalid answer fails closed as `unavailable`, so no decision is made on another time. */
+  const clock = { now: clockNow }
+  const now = (): Date => timeFrom(clock)
+
   async function io<T>(what: string, run: () => Promise<T>): Promise<T> {
     try {
       return await run()
@@ -68,6 +74,8 @@ export function createService({ store, directory, catalogue, policy, emit, now =
 
   async function decide(input: AuthoriseInput): Promise<AuthorisationDecision> {
     const { subject, permission, resource } = input
+    // The time of the decision, read first: a clock that fails refuses before anything is read.
+    const at = now()
     const options = consistencyFor(permission)
     const [actor, owningGroup] = await io('directory', () => Promise.all([
       directory.resolveActor(subject.principalId, options),
@@ -91,7 +99,7 @@ export function createService({ store, directory, catalogue, policy, emit, now =
       grants,
       catalogue,
       policy,
-      now: now(),
+      now: at,
     })
   }
 
@@ -202,7 +210,8 @@ export function createService({ store, directory, catalogue, policy, emit, now =
         const roles = await io('store', () => store.customRoles([group.tenantId]))
         if (!roles.get(group.tenantId)?.has(input.roleId)) throw new AuthorisationFailure('validation-failed', 'unknown role')
       }
-      const changed = await io('store', () => store.assign({ principalId, groupId: group.groupId, roleId: input.roleId, scope }, actor))
+      const at = now()
+      const changed = await io('store', () => store.assign({ principalId, groupId: group.groupId, roleId: input.roleId, scope }, actor, at))
       if (changed) await emit(event('authorisation.role-assigned', { actorPrincipalId: actor, subjectPrincipalId: principalId, groupId: group.groupId, roleId: input.roleId }))
       return changed
     },
@@ -226,7 +235,8 @@ export function createService({ store, directory, catalogue, policy, emit, now =
       for (const { pattern } of parsed.data.permissions) {
         if (!pattern.includes('*') && !catalogue.has(pattern)) throw new AuthorisationFailure('validation-failed', 'unknown permission')
       }
-      const outcome = await io('store', () => store.defineRole(tenantId, parsed.data))
+      const at = now()
+      const outcome = await io('store', () => store.defineRole(tenantId, parsed.data, at))
       await emit(event(outcome === 'defined' ? 'authorisation.role-defined' : 'authorisation.role-changed', { actorPrincipalId: actor, roleId: parsed.data.id }))
       return outcome
     },
@@ -247,8 +257,9 @@ export function createService({ store, directory, catalogue, policy, emit, now =
         throw new AuthorisationFailure('validation-failed', 'invalid permissions')
       }
       requireIdentifier(grant.subject?.kind === 'group' ? grant.subject.groupId : grant.subject?.principalId, 'grant subject')
-      if (grant.expiresAt !== null && !(Date.parse(grant.expiresAt) > now().getTime())) throw new AuthorisationFailure('validation-failed', 'expiry in the past')
-      const grantId = await io('store', () => store.createGrant(grant, actor))
+      const at = now()
+      if (grant.expiresAt !== null && !(Date.parse(grant.expiresAt) > at.getTime())) throw new AuthorisationFailure('validation-failed', 'expiry in the past')
+      const grantId = await io('store', () => store.createGrant(grant, actor, at))
       await emit(event('authorisation.grant-created', {
         actorPrincipalId: actor,
         subjectPrincipalId: grant.subject.kind === 'principal' ? grant.subject.principalId : null,

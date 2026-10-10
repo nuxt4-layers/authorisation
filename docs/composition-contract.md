@@ -44,6 +44,7 @@ The host application:
   - the hierarchy it describes must not imply membership: a member of a parent group is not listed as a member of its children unless Identity's own versioned policy says so;
 - supplies every domain capability's permission definitions through `provideAuthorisationPermissions` (once per capability is fine), each with the `effect` its capability declares (`view` or `change`; missing means `change`);
 - optionally supplies an event sink and policy overrides;
+- optionally supplies the suite's clock through `provideAuthorisationClock` (docs/contracts.md §13): the same `{ now(): Date }` it gives every member, or none, so that each uses the system clock. Only its server code composes it; a clock that can be moved is for tests only;
 - passes the authenticated principal from Authentication as the subject of each decision;
 - integration-tests the composed system, including negative tests for tenant isolation and for leaving a group.
 
@@ -56,6 +57,7 @@ export default defineNitroPlugin(() => {
   provideAuthorisationDatabase({ dialect: 'postgres', pool })
   provideAuthorisationDirectory(identityDirectoryAdapter)
   provideAuthorisationPermissions(ORDER_PERMISSIONS)
+  provideAuthorisationClock(suiteClock) // optional: the same clock as every other member, or none
 })
 ```
 
@@ -67,7 +69,8 @@ The authorisation layer:
 - owns the `authorisation` database schema and its migrations;
 - enforces decisions on the server only;
 - publishes `AuthorisationDecision` and `AuthorisationEvent`;
-- fails closed when a required port is absent, or the directory or database fails.
+- takes every time it keeps or judges from the host's clock, or the system clock when none is supplied;
+- fails closed when a required port is absent, or the directory, database or clock fails.
 
 ## 6. Persistence (ADR-0002)
 
@@ -86,6 +89,7 @@ The authorisation layer:
 | Conflicting permission definitions | `TypeError` from `provideAuthorisationPermissions` |
 | Directory does not know the principal or group | Refused (`unknown-subject`, `unknown-group`) |
 | Directory or database failure | `unavailable` (503). Refused; internal details are not disclosed |
+| Clock fails or answers anything but a valid `Date` | `unavailable` (503). Refused before anything is read; never another time |
 | Event sink failure | Reported via `console.error`. The decision is unchanged. |
 
 ## 8. Composed-system verification

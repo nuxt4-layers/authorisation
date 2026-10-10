@@ -1,4 +1,5 @@
 import type {
+  AuthorisationClock,
   AuthorisationDatabase,
   AuthorisationDirectory,
   AuthorisationEvent,
@@ -16,6 +17,7 @@ import {
   permissionDefinitionSchema,
   resolveAuthorisationPolicy,
 } from '../../contracts'
+import { systemAuthorisationClock } from '../internal/clock'
 
 /**
  * Composition registry. The host application calls the `provide*` functions
@@ -23,13 +25,15 @@ import {
  *
  * Required ports fail closed: using one before it is supplied throws
  * `AuthorisationCompositionError` instead of falling back to an implicit
- * store or directory.
+ * store or directory. The clock is the one optional port with a safe
+ * default: the system clock.
  */
 
 let database: (AuthorisationDatabase & { schema: string }) | null = null
 let directory: AuthorisationDirectory | null = null
 let eventSink: AuthorisationEventSink | null = null
 let policy: AuthorisationPolicy | null = null
+let clock: AuthorisationClock | null = null
 const catalogue = new Map<string, AuthorisationPermissionDefinition>(
   AUTHORISATION_PERMISSIONS.map(definition => [definition.name, definition]),
 )
@@ -57,6 +61,23 @@ export function provideAuthorisationEventSink(next: AuthorisationEventSink): voi
     throw new TypeError('provideAuthorisationEventSink expects an object with an emit(event) function.')
   }
   eventSink = next
+}
+
+/**
+ * The suite's clock (iam-integration architecture §7): the host supplies the
+ * same clock to every member, or none. Trusted like a key: only the host's
+ * server code composes it, and no request can set or move it.
+ */
+export function provideAuthorisationClock(next: AuthorisationClock): void {
+  if (typeof next?.now !== 'function') {
+    throw new TypeError('provideAuthorisationClock expects an object with a now() function.')
+  }
+  clock = next
+}
+
+/** The host's clock, or the system clock when none is supplied. */
+export function useAuthorisationClock(): AuthorisationClock {
+  return clock ?? systemAuthorisationClock
 }
 
 /**
@@ -144,6 +165,7 @@ export function clearAuthorisationComposition(): void {
   directory = null
   eventSink = null
   policy = null
+  clock = null
   catalogue.clear()
   for (const definition of AUTHORISATION_PERMISSIONS) catalogue.set(definition.name, definition)
 }

@@ -45,14 +45,14 @@ export function createStore(pool: PostgresPoolLike, schema: string) {
       return rows.map(toAssignment)
     },
 
-    /** Adds an assignment, or changes its scope. Returns whether anything changed. */
-    async assign(assignment: AuthorisationRoleAssignment, assignedBy: string | null): Promise<boolean> {
+    /** Adds an assignment at `at` (the clock's time), or changes its scope. Returns whether anything changed. */
+    async assign(assignment: AuthorisationRoleAssignment, assignedBy: string | null, at: Date): Promise<boolean> {
       const { rows } = await query<{ changed: boolean }>(
-        `insert into ${s}."role_assignment" (principal_id, group_id, role_id, scope, assigned_by) values ($1, $2, $3, $4, $5)
+        `insert into ${s}."role_assignment" (principal_id, group_id, role_id, scope, assigned_by, created_at) values ($1, $2, $3, $4, $5, $6)
          on conflict (principal_id, group_id, role_id) do update set scope = excluded.scope, assigned_by = excluded.assigned_by
          where ${s}."role_assignment".scope <> excluded.scope
          returning true as changed`,
-        [assignment.principalId, assignment.groupId, assignment.roleId, assignment.scope, assignedBy],
+        [assignment.principalId, assignment.groupId, assignment.roleId, assignment.scope, assignedBy, at.toISOString()],
       )
       return rows.length > 0
     },
@@ -80,12 +80,13 @@ export function createStore(pool: PostgresPoolLike, schema: string) {
       return roles
     },
 
-    async defineRole(tenantId: string, role: AuthorisationRoleDefinition): Promise<'defined' | 'changed'> {
+    /** Defines or changes a tenant's custom role at `at` (the clock's time). */
+    async defineRole(tenantId: string, role: AuthorisationRoleDefinition, at: Date): Promise<'defined' | 'changed'> {
       const { rows } = await query<{ inserted: boolean }>(
-        `insert into ${s}."custom_role" (tenant_id, role_id, definition) values ($1, $2, $3::jsonb)
-         on conflict (tenant_id, role_id) do update set definition = excluded.definition, updated_at = now()
+        `insert into ${s}."custom_role" (tenant_id, role_id, definition, created_at, updated_at) values ($1, $2, $3::jsonb, $4, $4)
+         on conflict (tenant_id, role_id) do update set definition = excluded.definition, updated_at = excluded.updated_at
          returning (xmax = 0) as inserted`,
-        [tenantId, role.id, JSON.stringify(role)],
+        [tenantId, role.id, JSON.stringify(role), at.toISOString()],
       )
       return rows[0]?.inserted ? 'defined' : 'changed'
     },
@@ -140,11 +141,12 @@ export function createStore(pool: PostgresPoolLike, schema: string) {
       return { assignments: Number(rows[0]?.assignments ?? 0), grants: Number(rows[0]?.grants ?? 0) }
     },
 
-    async createGrant(grant: AuthorisationGrant, grantedBy: string | null): Promise<string> {
+    /** Records a grant made at `at` (the clock's time). Its expiry is judged against the clock at each decision, never by SQL. */
+    async createGrant(grant: AuthorisationGrant, grantedBy: string | null, at: Date): Promise<string> {
       const grantId = randomUUID()
       await query(
-        `insert into ${s}."grant" (grant_id, resource_type, resource_id, subject_kind, subject_id, permissions, expires_at, granted_by) values ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [grantId, grant.resource.type, grant.resource.id, grant.subject.kind, grant.subject.kind === 'group' ? grant.subject.groupId : grant.subject.principalId, [...grant.permissions], grant.expiresAt, grantedBy],
+        `insert into ${s}."grant" (grant_id, resource_type, resource_id, subject_kind, subject_id, permissions, expires_at, granted_by, created_at) values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [grantId, grant.resource.type, grant.resource.id, grant.subject.kind, grant.subject.kind === 'group' ? grant.subject.groupId : grant.subject.principalId, [...grant.permissions], grant.expiresAt, grantedBy, at.toISOString()],
       )
       return grantId
     },

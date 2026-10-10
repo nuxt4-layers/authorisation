@@ -48,6 +48,10 @@
     {
       "port": "AuthorisationPolicy",
       "optional": true
+    },
+    {
+      "port": "AuthorisationClock",
+      "optional": true
     }
   ],
   "integration": {

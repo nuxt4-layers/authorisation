@@ -15,6 +15,15 @@ import { AUTHORISATION_PERMISSIONS, AuthorisationFailure, resolveAuthorisationPo
 import { AUTHORISATION_MIGRATIONS, runAuthorisationMigrations } from '../server/database/migrations'
 import { createService } from '../server/internal/service'
 import { createStore } from '../server/internal/store'
+import {
+  clearAuthorisationComposition,
+  provideAuthorisationClock,
+  provideAuthorisationDatabase,
+  provideAuthorisationDirectory,
+  provideAuthorisationEventSink,
+  provideAuthorisationPermissions,
+} from '../server/utils/authorisation-composition'
+import { assignAuthorisationRole, authorise, createAuthorisationGrant } from '../server/utils/authorisation-server'
 import { createTestDatabase, hasDatabase, requireDatabaseInCi } from './support/database'
 
 requireDatabaseInCi()
@@ -25,6 +34,7 @@ const PERMISSIONS: AuthorisationPermissionDefinition[] = [
   { name: 'orders:update', description: 'Change orders', risk: 'medium', effect: 'change' },
   { name: 'orders:process_refund', description: 'Refund an order', risk: 'high', effect: 'change' },
   { name: 'identity.groups:archive', description: 'Archive a group', risk: 'high', effect: 'change' },
+  { name: 'orders:purge', description: 'Purge an order', risk: 'critical', effect: 'change' },
 ]
 
 describe.skipIf(!hasDatabase)('authorisation storage and decisions on PostgreSQL', () => {
@@ -170,6 +180,79 @@ describe.skipIf(!hasDatabase)('authorisation storage and decisions on PostgreSQL
     expect(await service().revokeGrant({ grantId, actorPrincipalId: 'alice' })).toBe(true)
     expect((await service().authorise({ subject: subject('erin'), permission: 'orders:view', resource: order('sales', 'order-9') })).allowed).toBe(false)
     expect(events.map(e => e.type)).toContain('authorisation.grant-revoked')
+  })
+
+  describe('the clock, through the public server functions', () => {
+    let at = new Date('2030-01-01T00:00:00.000Z')
+    const minutes = (n: number) => new Date(Date.parse('2030-01-01T00:00:00.000Z') + n * 60_000)
+    const signedIn = (principalId: string): AuthorisationSubject =>
+      ({ principalId, authenticatedAt: '2030-01-01T00:00:00.000Z', assurance: { level: 'aal2', phishingResistant: true } })
+
+    beforeEach(() => {
+      clearAuthorisationComposition()
+      provideAuthorisationDatabase({ dialect: 'postgres', pool })
+      provideAuthorisationDirectory(directory)
+      provideAuthorisationPermissions(PERMISSIONS)
+      provideAuthorisationEventSink({ emit: (event) => { events.push(event) } })
+    })
+
+    afterAll(() => clearAuthorisationComposition())
+
+    it('uses the system clock when the host supplies none', async () => {
+      member('gina', 'sales')
+      const before = Date.now()
+      const grantId = await createAuthorisationGrant({ grant: { resource: { type: 'orders', id: 'order-system' }, subject: { kind: 'principal', principalId: 'gina' }, permissions: ['orders:view'], expiresAt: new Date(Date.now() + 60_000).toISOString() }, actorPrincipalId: 'alice' })
+      const { rows } = await pool.query(`select created_at from "authorisation"."grant" where grant_id = $1`, [grantId])
+      expect(rows[0].created_at.getTime()).toBeGreaterThanOrEqual(before - 1000)
+      expect(rows[0].created_at.getTime()).toBeLessThanOrEqual(Date.now() + 1000)
+      expect((await authorise({ subject: subject('gina'), permission: 'orders:view', resource: order('sales', 'order-system') })).allowed).toBe(true)
+    })
+
+    it('decides a grant\'s expiry and a critical permission\'s authentication age by the supplied clock, and records its times', async () => {
+      provideAuthorisationClock({ now: () => at })
+      member('frank', 'sales')
+      at = minutes(0)
+      // In the past by the clock, though still in the future by the system's.
+      await expect(createAuthorisationGrant({ grant: { resource: { type: 'orders', id: 'order-clock' }, subject: { kind: 'principal', principalId: 'frank' }, permissions: ['orders:view'], expiresAt: '2029-12-31T23:00:00.000Z' }, actorPrincipalId: 'alice' }))
+        .rejects.toMatchObject({ code: 'validation-failed' })
+      const grantId = await createAuthorisationGrant({ grant: { resource: { type: 'orders', id: 'order-clock' }, subject: { kind: 'principal', principalId: 'frank' }, permissions: ['orders:view', 'orders:purge'], expiresAt: '2030-01-01T01:00:00.000Z' }, actorPrincipalId: 'alice' })
+      const { rows } = await pool.query(`select created_at from "authorisation"."grant" where grant_id = $1`, [grantId])
+      expect(rows[0].created_at.toISOString()).toBe('2030-01-01T00:00:00.000Z')
+      expect(await assignAuthorisationRole({ principalId: 'frank', groupId: 'sales', roleId: 'viewer', actorPrincipalId: 'system' })).toBe(true)
+      const assigned = await pool.query(`select created_at from "authorisation"."role_assignment" where principal_id = 'frank' and role_id = 'viewer'`)
+      expect(assigned.rows[0].created_at.toISOString()).toBe('2030-01-01T00:00:00.000Z')
+      expect(events.at(-1)).toMatchObject({ type: 'authorisation.role-assigned', occurredAt: '2030-01-01T00:00:00.000Z' })
+
+      const purge = () => authorise({ subject: signedIn('frank'), permission: 'orders:purge', resource: order('sales', 'order-clock') })
+      const view = () => authorise({ subject: signedIn('frank'), permission: 'orders:view', resource: order('sales', 'order-clock') })
+      at = minutes(5)
+      expect(await purge()).toMatchObject({ allowed: true, via: 'grant' })
+      // Twenty minutes after signing in, by the clock: too long ago for a critical permission.
+      at = minutes(20)
+      expect(await purge()).toMatchObject({ allowed: false, reason: 'insufficient-assurance' })
+      expect(events.at(-1)).toMatchObject({ type: 'authorisation.denied', permission: 'orders:purge', occurredAt: minutes(20).toISOString() })
+      // Only the grant now: past its expiry by the clock it no longer counts, though by the system's clock it has years to run.
+      await pool.query(`delete from "authorisation"."role_assignment" where principal_id = 'frank'`)
+      expect(await view()).toMatchObject({ allowed: true, via: 'grant' })
+      at = minutes(90)
+      expect((await view()).allowed).toBe(false)
+    })
+
+    it('fails closed when the clock answers an invalid time or fails: no decision, nothing read or written', async () => {
+      member('hana', 'sales')
+      for (const now of [() => new Date(Number.NaN), () => 'soon' as unknown as Date, () => { throw new Error('clock down') }]) {
+        provideAuthorisationClock({ now })
+        reads.length = 0
+        events.length = 0
+        await expect(authorise({ subject: subject('hana'), permission: 'orders:view', resource: order('sales') })).rejects.toMatchObject({ name: 'AuthorisationFailure', code: 'unavailable' })
+        expect(reads).toEqual([])
+        await expect(assignAuthorisationRole({ principalId: 'hana', groupId: 'sales', roleId: 'viewer', actorPrincipalId: 'system' })).rejects.toMatchObject({ code: 'unavailable' })
+        await expect(createAuthorisationGrant({ grant: { resource: { type: 'orders', id: 'order-bad-clock' }, subject: { kind: 'principal', principalId: 'hana' }, permissions: ['orders:view'], expiresAt: null }, actorPrincipalId: 'alice' })).rejects.toMatchObject({ code: 'unavailable' })
+        expect(events).toEqual([])
+      }
+      const { rows } = await pool.query(`select 1 from "authorisation"."role_assignment" where principal_id = 'hana' union all select 1 from "authorisation"."grant" where subject_id = 'hana'`)
+      expect(rows).toEqual([])
+    })
   })
 
   it('exports what a principal holds, and erases it on closure, leaving others untouched', async () => {

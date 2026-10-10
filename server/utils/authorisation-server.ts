@@ -17,6 +17,7 @@ import { createStore } from '../internal/store'
 import {
   emitAuthorisationEvent,
   useAuthorisationCatalogue,
+  useAuthorisationClock,
   useAuthorisationDatabase,
   useAuthorisationDirectory,
   useAuthorisationPolicy,
@@ -25,7 +26,9 @@ import {
 /**
  * PUBLIC server functions (auto-imported for the host's server code). Every
  * one fails closed: a directory or database failure throws
- * `AuthorisationFailure('unavailable')`.
+ * `AuthorisationFailure('unavailable')`, as does a clock that answers an
+ * invalid time. Every time they keep or judge comes from the host's clock
+ * (`provideAuthorisationClock`), or the system clock when none is supplied.
  *
  * The functions that change roles, assignments and grants decide nothing:
  * the caller has already authorised the change (the layer's own endpoints in
@@ -57,6 +60,8 @@ async function service() {
     catalogue: useAuthorisationCatalogue(),
     policy: useAuthorisationPolicy(),
     emit: emitAuthorisationEvent,
+    // Read at each use, so every time comes from the host's clock (or the system clock).
+    now: () => useAuthorisationClock().now(),
   })
 }
 

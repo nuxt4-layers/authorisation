@@ -18,6 +18,7 @@
 | Identity → host directory adapter → Authorisation | Lineage and current memberships | — |
 | Domain capability → Authorisation | The resource description the domain capability read from its own store | A resource ID or owning group supplied by a client |
 | Host → database | The `authorisation` schema | Other capabilities' schemas (never read) |
+| Host → Authorisation's clock | The current time, from the clock the host composes in server code (or the system clock) | Any time in a request |
 
 ## 3. Threats and controls
 
@@ -42,6 +43,7 @@
 | T18 | A paused member, hidden from the group, changes its information or reads sensitive material unnoticed | Paused standing (a membership, or the whole principal) confers only `view` permissions at `low` or `medium` risk on every route, personal group and grants included; `effect` is declared per permission and defaults to `change`; an unknown principal status confers nothing; an active route is never hidden by a paused one (§6a) | "paused memberships and principals" decision tests; `tests/database.test.ts` | Implemented |
 | T17 | Privilege gained through the group hierarchy, e.g. by reparenting a group under one whose admins should not see it | The hierarchy confers nothing by default; inheritance only through an explicit `group-and-descendants` assignment, which follows the current tree; assigning that scope is a critical operation | "the hierarchy confers no privilege by default" tests | Implemented (engine); permission checks on assignment phase 2 |
 | T19 | A closed person keeps access, or their roles and grants outlive their erasure | `eraseAuthorisationPrincipal` removes every assignment and grant the principal holds, on `identity.closed` through iam-integration's handler (deferred only by a recorded legal hold); idempotent and announced; the export lists only what the principal holds, by opaque identifier and permission name | `tests/database.test.ts` | Implemented (phase 2b) |
+| T20 | A wrong or moved clock keeps an expired grant alive, makes an old sign-in pass a critical permission's age limit, or misdates the record | The clock is a host-supplied trust, like the directory: composed only from the host's server code (`provideAuthorisationClock`), never from a request; the same clock for every member, or the system clock; every time Authorisation keeps or judges comes from it, read once per decision, and the database is given its time rather than judging its own; an answer that is not a valid `Date`, or a failure, refuses the operation (`unavailable`) before anything is read, with no fallback; a movable clock is for tests only | `tests/composition.test.ts` "Authorisation clock"; `tests/database.test.ts` "the clock, through the public server functions" | Implemented |
 
 ## 4. Deferred controls and risk treatments
 
