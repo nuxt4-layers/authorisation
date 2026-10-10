@@ -110,6 +110,36 @@ export function createStore(pool: PostgresPoolLike, schema: string) {
       }))
     },
 
+    /** Grants to one principal, on any resource. */
+    async grantsHeldBy(principalId: string): Promise<StoredGrant[]> {
+      const { rows } = await query<{ grant_id: string, resource_type: string, resource_id: string, permissions: string[], expires_at: Date | null }>(
+        `select grant_id, resource_type, resource_id, permissions, expires_at from ${s}."grant" where subject_kind = 'principal' and subject_id = $1 order by resource_type, resource_id, grant_id`,
+        [principalId],
+      )
+      return rows.map(row => ({
+        grantId: row.grant_id,
+        resource: { type: row.resource_type, id: row.resource_id },
+        subject: { kind: 'principal', principalId },
+        permissions: row.permissions,
+        expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
+      }))
+    },
+
+    /**
+     * Removes every role assignment and every grant a principal holds, in one
+     * transaction. Records the principal made for others keep the opaque
+     * identifier in `assigned_by` and `granted_by` (anonymisation by unlinking).
+     */
+    async erasePrincipal(principalId: string): Promise<{ assignments: number, grants: number }> {
+      const { rows } = await query<{ assignments: string, grants: string }>(
+        `with assignments as (delete from ${s}."role_assignment" where principal_id = $1 returning 1),
+              grants as (delete from ${s}."grant" where subject_kind = 'principal' and subject_id = $1 returning 1)
+         select (select count(*) from assignments) as assignments, (select count(*) from grants) as grants`,
+        [principalId],
+      )
+      return { assignments: Number(rows[0]?.assignments ?? 0), grants: Number(rows[0]?.grants ?? 0) }
+    },
+
     async createGrant(grant: AuthorisationGrant, grantedBy: string | null): Promise<string> {
       const grantId = randomUUID()
       await query(

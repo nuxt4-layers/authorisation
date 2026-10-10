@@ -172,6 +172,31 @@ describe.skipIf(!hasDatabase)('authorisation storage and decisions on PostgreSQL
     expect(events.map(e => e.type)).toContain('authorisation.grant-revoked')
   })
 
+  it('exports what a principal holds, and erases it on closure, leaving others untouched', async () => {
+    member('fay', 'company')
+    member('gus', 'company')
+    await service().assign({ principalId: 'fay', groupId: 'sales', roleId: 'member', actorPrincipalId: 'alice' })
+    await service().assign({ principalId: 'gus', groupId: 'sales', roleId: 'member', actorPrincipalId: 'fay' })
+    const grantId = await service().createGrant({ grant: { resource: { type: 'orders', id: 'order-7' }, subject: { kind: 'principal', principalId: 'fay' }, permissions: ['orders:view'], expiresAt: null }, actorPrincipalId: 'alice' })
+    await service().createGrant({ grant: { resource: { type: 'orders', id: 'order-7' }, subject: { kind: 'group', groupId: 'sales' }, permissions: ['orders:view'], expiresAt: null }, actorPrincipalId: 'fay' })
+
+    const exported = await service().exportPrincipal({ principalId: 'fay', correlationId: '01a00000-0000-7000-8000-000000000001' })
+    expect(exported).toMatchObject({ principalId: 'fay', correlationId: '01a00000-0000-7000-8000-000000000001' })
+    expect(exported.roleAssignments).toEqual([{ principalId: 'fay', groupId: 'sales', roleId: 'member', scope: 'group' }])
+    expect(exported.grants).toEqual([{ grantId, resource: { type: 'orders', id: 'order-7' }, permissions: ['orders:view'], expiresAt: null }])
+
+    expect(await service().erasePrincipal({ principalId: 'fay', actorPrincipalId: 'iam-integration' })).toEqual({ assignments: 1, grants: 1 })
+    expect(events.filter(e => e.type === 'authorisation.principal-erased')).toEqual([expect.objectContaining({ actorPrincipalId: 'iam-integration', subjectPrincipalId: 'fay' })])
+    const after = await service().exportPrincipal({ principalId: 'fay', correlationId: '01a00000-0000-7000-8000-000000000001' })
+    expect(after.roleAssignments).toEqual([])
+    expect(after.grants).toEqual([])
+    // What fay did for others stays, keeping only her opaque identifier.
+    expect(await service().listAssignments({ principalId: 'gus' })).toEqual([{ principalId: 'gus', groupId: 'sales', roleId: 'member', scope: 'group' }])
+    events.length = 0
+    expect(await service().erasePrincipal({ principalId: 'fay', actorPrincipalId: 'iam-integration' })).toEqual({ assignments: 0, grants: 0 })
+    expect(events).toEqual([])
+  })
+
   describe('qualification for approvals', () => {
     beforeAll(async () => {
       // Wildcards never cover high or critical permissions: a role names them.

@@ -66,6 +66,7 @@ export { AUTHORISATION_MEMBERSHIP_STATUSES, AUTHORISATION_PRINCIPAL_STATUSES } f
 export type {
   AuthorisationCondition,
   AuthorisationConditionOperator,
+  AuthorisationDataExport,
   AuthorisationGrant,
   AuthorisationGrantSubject,
   AuthorisationRoleAssignment,

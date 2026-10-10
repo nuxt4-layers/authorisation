@@ -1,4 +1,5 @@
 import type {
+  AuthorisationDataExport,
   AuthorisationDecision,
   AuthorisationDirectory,
   AuthorisationEvent,
@@ -255,6 +256,36 @@ export function createService({ store, directory, catalogue, policy, emit, now =
         resource: { type: grant.resource.type, id: grant.resource.id },
       }))
       return grantId
+    },
+
+    /** A principal's part of a data-subject access request: the assignments and grants it holds. */
+    async exportPrincipal(input: { principalId: string, correlationId: string }): Promise<AuthorisationDataExport> {
+      const principalId = requireIdentifier(input.principalId, 'principal')
+      const correlationId = requireIdentifier(input.correlationId, 'correlation')
+      const [assignments, grants] = await Promise.all([
+        io('store', () => store.assignmentsOf(principalId)),
+        io('store', () => store.grantsHeldBy(principalId)),
+      ])
+      return {
+        principalId,
+        exportedAt: now().toISOString(),
+        correlationId,
+        roleAssignments: [...assignments].sort((a, b) => `${a.groupId} ${a.roleId}`.localeCompare(`${b.groupId} ${b.roleId}`)),
+        grants: grants.map(({ grantId, resource, permissions, expiresAt }) => ({ grantId, resource, permissions, expiresAt })),
+      }
+    },
+
+    /**
+     * Removes every assignment and grant the principal holds (account
+     * closure; erasure). Decides nothing: the caller acts on Identity's
+     * `identity.closed`. Idempotent; announced once something was removed.
+     */
+    async erasePrincipal(input: { principalId: string, actorPrincipalId: string }): Promise<{ assignments: number, grants: number }> {
+      const principalId = requireIdentifier(input.principalId, 'principal')
+      const actor = requireIdentifier(input.actorPrincipalId, 'actor')
+      const removed = await io('store', () => store.erasePrincipal(principalId))
+      if (removed.assignments + removed.grants > 0) await emit(event('authorisation.principal-erased', { actorPrincipalId: actor, subjectPrincipalId: principalId }))
+      return removed
     },
 
     async revokeGrant(input: { grantId: string, actorPrincipalId: string }): Promise<boolean> {
