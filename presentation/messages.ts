@@ -1,0 +1,221 @@
+/**
+ * The layer's own message catalogue (en-GB). Hosts change wording or add
+ * locales in `app.config.ts`: `authorisation: { messages: { 'en-GB': { ... }, 'cy-GB': { ... } } }`.
+ * `{name}` placeholders are replaced from the parameters passed to `t()`.
+ */
+export const AUTHORISATION_MESSAGES_EN_GB = {
+  // Shared
+  'authorisation.common.cancel': 'Cancel',
+  'authorisation.common.signIn': 'Sign in',
+  'authorisation.common.signInRequired': 'Sign in to see this page.',
+  'authorisation.common.none': 'None',
+  'authorisation.common.never': 'No end date',
+  'authorisation.common.serverDecides': 'Whatever you choose here is checked again on the server before anything changes.',
+  'authorisation.common.seeChange': 'See the change',
+  'authorisation.person.label': 'Person …{short}',
+
+  // Justification, asked of every change
+  'authorisation.justification.legend': 'Why',
+  'authorisation.justification.reasonCode': 'Reason code',
+  'authorisation.justification.reasonHint': 'A short code, such as new-starter or audit-finding: lower-case letters, digits and hyphens.',
+  'authorisation.justification.reference': 'Reference (optional)',
+  'authorisation.justification.referenceHint': 'A ticket or case number, such as CHG-1042, when your group asks for one.',
+
+  // Errors, by contract code
+  'authorisation.error.unauthenticated': 'Sign in to continue.',
+  'authorisation.error.forbidden': 'This is not available to you.',
+  'authorisation.error.insufficient-assurance': 'Sign in again to confirm it is you, then try again.',
+  'authorisation.error.validation-failed': 'Some of the details are not valid. Check them and try again.',
+  'authorisation.error.conflict': 'That cannot be done at the moment.',
+  'authorisation.error.unavailable': 'Something went wrong. Try again later.',
+
+  // Errors, by the rule behind a conflict or validation failure
+  'authorisation.reason.self-grant': 'You cannot give this to yourself. Someone else must request it.',
+  'authorisation.reason.owner-role': 'Owners are appointed through the group\'s own settings, not here.',
+  'authorisation.reason.reference-missing': 'This group asks for a reference with every change.',
+  'authorisation.reason.group-not-active': 'This group is not active.',
+  'authorisation.reason.not-a-member': 'That person is not a member of the group.',
+  'authorisation.reason.unknown-role': 'That role does not exist here.',
+  'authorisation.reason.not-assigned': 'That person no longer holds this role.',
+  'authorisation.reason.role-in-use': 'The role is still held by someone, or is a default role. Remove it from them first.',
+  'authorisation.reason.built-in-role': 'That identifier belongs to a built-in role. Choose another.',
+  'authorisation.reason.unknown-permission': 'One of the permissions is not known here.',
+  'authorisation.reason.guest-role-too-risky': 'A guest\'s role cannot hold a high-risk or critical permission.',
+  'authorisation.reason.expiry-in-the-past': 'The end date has already passed.',
+  'authorisation.reason.requirement-changed': 'The group\'s approval rules changed since this was requested.',
+  'authorisation.reason.risk-changed': 'The role has become riskier since this was requested.',
+  'authorisation.reason.requester-not-qualified': 'The person who asked may no longer make this change.',
+  'authorisation.reason.change-differs': 'The change has altered since you saw it. Reload and check it again.',
+  'authorisation.reason.grant-gone': 'That sharing has already ended.',
+  'authorisation.reason.unknown-holder': 'That person or group is not known.',
+  'authorisation.reason.own-request': 'You cannot decide your own request.',
+  'authorisation.reason.beneficiary': 'You cannot decide a change made for you.',
+  'authorisation.reason.controlled-by-requester': 'You cannot decide a change requested by whoever controls your account.',
+  'authorisation.reason.not-qualified': 'You may not decide this change.',
+  'authorisation.reason.not-pending': 'This is no longer waiting for a decision.',
+  'authorisation.reason.already-decided': 'You have already decided this change.',
+
+  // What became of a requested change
+  'authorisation.outcome.applied': 'Done.',
+  'authorisation.outcome.awaiting-approval': 'Requested. It takes effect once it is approved.',
+  'authorisation.outcome.delayed': 'Requested. It takes effect on {when} unless it is withdrawn.',
+  'authorisation.outcome.rejected': 'It could not be made: a rule no longer allowed it.',
+  'authorisation.outcome.cancelled': 'Withdrawn.',
+  'authorisation.outcome.expired': 'It expired before anyone decided it.',
+
+  // Vocabularies
+  'authorisation.changeType.role.assign': 'Give a role',
+  'authorisation.changeType.role.unassign': 'Take a role away',
+  'authorisation.changeType.grant.create': 'Share',
+  'authorisation.changeType.grant.revoke': 'Stop sharing',
+  'authorisation.changeType.role.define': 'Define or change a role',
+  'authorisation.changeType.role.delete': 'Delete a role',
+  'authorisation.changeType.group.change-default-roles': 'Change the default roles',
+  'authorisation.changeType.group.change-review-interval': 'Change the review interval',
+  'authorisation.changeType.assignment.confirm': 'Confirm a role is still needed',
+  'authorisation.changeState.awaiting-approval': 'Waiting for approval',
+  'authorisation.changeState.delayed': 'Waiting',
+  'authorisation.changeState.applied': 'Done',
+  'authorisation.changeState.rejected': 'Rejected',
+  'authorisation.changeState.expired': 'Expired',
+  'authorisation.changeState.cancelled': 'Withdrawn',
+  'authorisation.route.approvers': '{count} approver(s) in the group',
+  'authorisation.route.parent-owner': 'An owner of the group above',
+  'authorisation.route.tenant-owner': 'An owner of the top-level group',
+  'authorisation.route.published-delay': 'Nobody: it takes effect after a published delay unless withdrawn',
+  'authorisation.route.none': 'No approver needed',
+  'authorisation.risk.low': 'Low',
+  'authorisation.risk.medium': 'Medium',
+  'authorisation.risk.high': 'High',
+  'authorisation.risk.critical': 'Critical',
+  'authorisation.builtInRole.owner': 'Owner',
+  'authorisation.builtInRole.administrator': 'Administrator',
+  'authorisation.builtInRole.member': 'Member',
+  'authorisation.builtInRole.viewer': 'Viewer',
+  'authorisation.scope.group': 'This group',
+  'authorisation.scope.group-and-descendants': 'This group and the groups below it',
+
+  // Group access page
+  'authorisation.access.title': 'Access to this group',
+  'authorisation.access.sharingLink': 'What this group shares',
+  'authorisation.access.rolesLink': 'Roles you can give',
+  'authorisation.assignments.title': 'Who holds which role',
+  'authorisation.assignments.empty': 'Nobody holds a role here yet.',
+  'authorisation.assignments.until': 'until {date}',
+  'authorisation.assignments.remove': 'Take away',
+  'authorisation.assignments.removeLabel': 'Take away the role {role}',
+  'authorisation.assignments.assignTitle': 'Give someone a role',
+  'authorisation.assignments.principal': 'Person\'s identifier',
+  'authorisation.assignments.principalHint': 'The member\'s identifier, as the group\'s member list shows it.',
+  'authorisation.assignments.role': 'Role',
+  'authorisation.assignments.expiresAt': 'End date (optional)',
+  'authorisation.assignments.expiresHint': 'The role ends at the start of this day. Leave empty for no end date.',
+  'authorisation.assignments.descendants': 'Also in every group below this one',
+  'authorisation.assignments.descendantsHint': 'A critical change: it needs an approver who has signed in recently with a passkey.',
+  'authorisation.assignments.submit': 'Request',
+  'authorisation.defaults.title': 'Default roles and reviews',
+  'authorisation.defaults.member': 'New members receive',
+  'authorisation.defaults.guest': 'New guests receive',
+  'authorisation.defaults.interval': 'Review interval',
+  'authorisation.defaults.intervalDays': 'Every {days} days',
+  'authorisation.defaults.noInterval': 'No regular review',
+  'authorisation.defaults.change': 'Change the default roles',
+  'authorisation.defaults.changeInterval': 'Change the review interval',
+  'authorisation.defaults.guestHint': 'A guest\'s role cannot hold a high-risk or critical permission.',
+  'authorisation.defaults.intervalLabel': 'Days between reviews (empty for none)',
+  'authorisation.defaults.submit': 'Request',
+  'authorisation.review.title': 'Access review',
+  'authorisation.review.intro': 'Confirm each role that is still needed, and take away what is not. An overdue role keeps working until someone takes it away.',
+  'authorisation.review.assigned': 'Given {date}',
+  'authorisation.review.by': 'by',
+  'authorisation.review.confirmed': 'Last confirmed {date}',
+  'authorisation.review.neverConfirmed': 'Never confirmed',
+  'authorisation.review.overdue': 'Overdue',
+  'authorisation.review.confirm': 'Confirm',
+  'authorisation.review.confirmLabel': 'Confirm the role {role} is still needed',
+  'authorisation.review.empty': 'There is nothing to review.',
+  'authorisation.changes.title': 'Changes waiting',
+
+  // Sharing page
+  'authorisation.sharing.title': 'What this group shares',
+  'authorisation.sharing.intro': 'Sharing is started from the item itself. Here you can see and stop what the group shares.',
+  'authorisation.sharing.empty': 'This group shares nothing.',
+  'authorisation.sharing.withPerson': 'With a person',
+  'authorisation.sharing.withGroup': 'With the group {group}',
+  'authorisation.sharing.resource': '{type} {id}',
+  'authorisation.sharing.revoke': 'Stop sharing',
+  'authorisation.sharing.revokeLabel': 'Stop sharing {type} {id}',
+  'authorisation.sharing.accessLink': 'Back to access to this group',
+
+  // Tenant roles page
+  'authorisation.roles.title': 'Roles',
+  'authorisation.roles.builtIn': 'Built in',
+  'authorisation.roles.custom': 'Defined here',
+  'authorisation.roles.permissions': 'Permissions',
+  'authorisation.roles.edit': 'Change',
+  'authorisation.roles.editLabel': 'Change the role {role}',
+  'authorisation.roles.delete': 'Delete',
+  'authorisation.roles.deleteLabel': 'Delete the role {role}',
+  'authorisation.roles.defineTitle': 'Define a role',
+  'authorisation.roles.editTitle': 'Change the role {role}',
+  'authorisation.roles.id': 'Identifier',
+  'authorisation.roles.idHint': 'Lower-case letters, digits and hyphens, such as refund-clerk. It cannot be changed later.',
+  'authorisation.roles.name': 'Name',
+  'authorisation.roles.description': 'Description (optional)',
+  'authorisation.roles.patterns': 'Permissions, one per line',
+  'authorisation.roles.patternsHint': 'Such as orders:view, orders:* or *:view. A pattern with * never covers a high-risk or critical permission: name those one by one.',
+  'authorisation.roles.submit': 'Request',
+  'authorisation.roles.critical': 'Defining, changing and deleting roles are critical changes: an owner of the top-level group must approve them.',
+
+  // Change page
+  'authorisation.change.title': 'Change to access',
+  'authorisation.change.state': 'State',
+  'authorisation.change.group': 'Group',
+  'authorisation.change.groupLink': 'Access to the group',
+  'authorisation.change.requester': 'Requested by',
+  'authorisation.change.beneficiary': 'For',
+  'authorisation.change.what': 'What',
+  'authorisation.change.risk': 'Risk',
+  'authorisation.change.reason': 'Reason',
+  'authorisation.change.route': 'Who approves',
+  'authorisation.change.appliesAt': 'Takes effect',
+  'authorisation.change.expiresAt': 'Expires unless decided',
+  'authorisation.change.heldUntil': 'Held until',
+  'authorisation.change.digest': 'Fingerprint of the change',
+  'authorisation.change.approve': 'Approve',
+  'authorisation.change.reject': 'Reject',
+  'authorisation.change.cancel': 'Withdraw',
+  'authorisation.change.approved': 'Your approval is recorded.',
+  'authorisation.change.rejected': 'Rejected.',
+  'authorisation.change.cancelled': 'Withdrawn.',
+  'authorisation.change.target.role': 'Role {role}',
+  'authorisation.change.target.scope': 'reaching {scope}',
+  'authorisation.change.target.until': 'until {date}',
+  'authorisation.change.target.share': '{permissions} on {type} {id}',
+  'authorisation.change.target.grant': 'Sharing {grant}',
+  'authorisation.change.target.defaults': 'Members: {member}; guests: {guest}',
+  'authorisation.change.target.interval': 'Review every {days} days',
+  'authorisation.change.target.noInterval': 'No regular review',
+  'authorisation.change.target.tenantRole': 'Role {role} of the organisation',
+} as const
+
+export type AuthorisationMessageKey = keyof typeof AUTHORISATION_MESSAGES_EN_GB
+export type AuthorisationMessages = Partial<Record<AuthorisationMessageKey, string>>
+
+/** Replaces `{name}` placeholders. */
+export function formatMessage(template: string, params: Record<string, string | number> = {}): string {
+  return template.replace(/\{(\w+)\}/g, (match, name: string) => (name in params ? String(params[name]) : match))
+}
+
+/** Resolves a message for a locale: host override, then the en-GB default, then the key itself. */
+export function resolveMessage(
+  key: string,
+  locale: string,
+  overrides: Record<string, AuthorisationMessages | undefined> | undefined,
+  params?: Record<string, string | number>,
+): string {
+  const template = overrides?.[locale]?.[key as AuthorisationMessageKey]
+    ?? (AUTHORISATION_MESSAGES_EN_GB as Record<string, string>)[key]
+    ?? key
+  return formatMessage(template, params)
+}

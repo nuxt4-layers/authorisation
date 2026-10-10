@@ -18,6 +18,8 @@ describe('Authorisation repository foundation', () => {
       '.': './nuxt.config.ts',
       './contracts': './contracts/index.ts',
       './capability': './capability.json',
+      './presentation': './presentation/index.ts',
+      './tailwind.css': './tailwind.css',
     })
     expect(manifest.publicExports).toEqual(Object.keys(pkg.exports))
   })

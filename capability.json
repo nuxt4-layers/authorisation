@@ -26,7 +26,9 @@
   "publicExports": [
     ".",
     "./contracts",
-    "./capability"
+    "./capability",
+    "./presentation",
+    "./tailwind.css"
   ],
   "ports": [
     {

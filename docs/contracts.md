@@ -240,3 +240,11 @@ Authorisation reads the current time from the clock the host supplies (`provideA
 - The clock is read once per decision, before anything else, and that one time decides the whole decision.
 - A clock that throws, or answers anything but a valid `Date`, fails the operation as `unavailable`: the decision is refused, and nothing is read, written or announced. Authorisation never falls back to another time.
 - The clock is trusted like a key: whoever supplies it can keep an expired grant alive or make an old sign-in look recent. Only the host composes it, from server code; no request can set or move it. A clock that can be moved is for tests only.
+
+## 17. Presentation
+
+The default pages style only through the SemanticPresentationTheme vocabulary (`authorisationClasses`). Fill, Pen and Edge of one surface share a role and a state; the deliberate cross-role pairings a host's theme must keep legible are:
+
+- `pen-muted-default` on `fill-base-default` (hints, notes and definition terms on the card);
+- `edge-error-default` on `fill-input-default` (an invalid field's border);
+- `edge-base-active` on `fill-base-default` (the focus indicator around controls on the card).
