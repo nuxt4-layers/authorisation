@@ -116,6 +116,17 @@ export interface AuthorisationGovernedGroup {
  * must reject; `describeGroup` answers null for a group Identity does not
  * know.
  */
+/**
+ * The legal holds Authorisation's retention asks about before deleting a
+ * record (iam-integration `docs/processes/retention.md`), supplied by the
+ * host from iam-integration's `legalHoldsFromMembers`: Identity's holds on
+ * groups and tenants, Profile's on people. Optional; without it nothing a
+ * hold might cover is deleted. A failure rejects, and the record is kept.
+ */
+export interface AuthorisationLegalHolds {
+  covers(subject: { kind: 'group' | 'tenant' | 'person', id: string }): Promise<boolean>
+}
+
 export interface AuthorisationGovernance {
   describeGroup(input: { groupId: string, principalId: string, correlationId: string }): Promise<AuthorisationGovernedGroup | null>
   isOwner(input: { principalId: string, groupId: string }): Promise<boolean>

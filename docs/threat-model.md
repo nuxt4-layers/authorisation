@@ -63,6 +63,8 @@
 | T33 | Default roles used to escalate every new member or guest | Changing them is `high` at least, with an approval, and a riskier set is held for the recovery hold period (`change-held`); `owner` is never a default; a guest's default can hold no `high` or `critical` permission, and `authorisationDefaultRoles` answers none if one ever does | `tests/administration.test.ts` "default roles" | Implemented |
 | T34 | A compromised session after credential recovery makes access changes | Every change requested within the requester's recovery hold (from Identity) is held until the hold ends, and announced (`change-held`) | `tests/administration.test.ts` "recovery hold" | Implemented |
 | T35 | The governance port lies or fails | Supplied only by the host's server code from Identity's record; a failure or a malformed answer refuses (`unavailable`), an unknown group `forbidden`; nothing is recorded | `tests/administration.test.ts` "fails closed" | Implemented |
+| T36 | A deleted group's assignments or grants linger, or are removed while a legal hold should keep them | Disposal removes every assignment, grant, setting and change of the group; it runs only when Identity says disposal is due, through the host's adapter, and confirms from the outbox so Identity raises any member that never confirms | `tests/administration.test.ts` | Implemented |
+| T37 | Retention deletes a change a legal hold covers | A decided change is deleted only when the host's legal-hold port says no hold covers its group; without the port, or when it fails, it is kept | `tests/administration.test.ts` | Implemented |
 
 ## 4. Deferred controls and risk treatments
 

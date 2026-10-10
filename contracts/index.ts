@@ -195,6 +195,7 @@ export type {
   AuthorisationRoleDocument,
   AuthorisationRoleView,
   AuthorisationSelfView,
+  AuthorisationTenantExport,
   AuthorisationTenantRoles,
 } from '../shared/administration'
 export {
@@ -210,7 +211,7 @@ export {
 // ---------------------------------------------------------------------------
 
 export type { AuthorisationPolicy, AuthorisationPolicyInput } from '../shared/policy'
-export { DEFAULT_AUTHORISATION_POLICY, resolveAuthorisationPolicy } from '../shared/policy'
+export { AUTHORISATION_RETENTION_BOUNDS, DEFAULT_AUTHORISATION_POLICY, resolveAuthorisationPolicy } from '../shared/policy'
 
 // ---------------------------------------------------------------------------
 // Composition ports (supplied by the host application)
@@ -225,6 +226,7 @@ export type {
   AuthorisationEventPublisher,
   AuthorisationEventSink,
   AuthorisationGovernance,
+  AuthorisationLegalHolds,
   AuthorisationGovernedGroup,
   AuthorisationSafetyPeriods,
   AuthorisationSubjectResolver,

@@ -48,6 +48,22 @@ export interface AuthorisationAccessReview {
   entries: AuthorisationAccessReviewEntry[]
 }
 
+/**
+ * Authorisation's part of a closing tenant's governance export
+ * (iam-integration tenant lifecycle): its custom roles as a versioned
+ * document, and for each of the tenant's groups (named by Identity's part)
+ * the assignments, the grants on what the group owns and its access
+ * settings. Identifiers, role and permission names, codes and instants.
+ */
+export interface AuthorisationTenantExport {
+  tenantId: string
+  exportedAt: string
+  roles: AuthorisationRoleDocument
+  assignments: AuthorisationAssignmentView[]
+  grants: AuthorisationGrantView[]
+  groupAccess: AuthorisationGroupAccess[]
+}
+
 /** A group's access settings. */
 export interface AuthorisationGroupAccess {
   groupId: string

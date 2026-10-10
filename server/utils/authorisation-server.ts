@@ -8,6 +8,7 @@ import type {
   AuthorisationRoleDocument,
   AuthorisationSelfView,
   AuthorisationSubject,
+  AuthorisationTenantExport,
   AuthorisationTenantRoles,
   AuthorisationDataExport,
   AuthorisationDecision,
@@ -37,6 +38,7 @@ import {
   useAuthorisationDatabase,
   useAuthorisationDirectory,
   useAuthorisationGovernance,
+  useAuthorisationLegalHolds,
   useAuthorisationPolicy,
 } from './authorisation-composition'
 
@@ -101,7 +103,7 @@ async function administration() {
     governance: useAuthorisationGovernance,
     now,
   })
-  return { changes, admin: createAdministration({ db, schemaName: database.schema, service: svc, changes, directory, now }) }
+  return { changes, admin: createAdministration({ db, schemaName: database.schema, service: svc, changes, directory, now, policy: useAuthorisationPolicy(), legalHolds: useAuthorisationLegalHolds }) }
 }
 
 /**
@@ -152,8 +154,34 @@ export async function authorisationDefaultRoles(groupId: string): Promise<Author
  * assignments overdue for review once. Server-only; the host runs it on a
  * schedule. Idempotent.
  */
-export async function runAuthorisationMaintenance(input: { limit?: number } = {}): Promise<{ expiredAssignments: number, expiredChanges: number, appliedChanges: number, rejectedChanges: number, failedChanges: number, overdueReviews: number }> {
+export async function runAuthorisationMaintenance(input: { limit?: number } = {}): Promise<{ expiredAssignments: number, expiredChanges: number, appliedChanges: number, rejectedChanges: number, failedChanges: number, overdueReviews: number, retention: { outboxEvents: number, changes: number } }> {
   return (await administration()).admin.maintenance(input)
+}
+
+/**
+ * Disposes of Authorisation's part of a deleted group (iam-integration group
+ * deletion): its assignments, the grants on what it owned and to it, its
+ * access settings and its changes. For the host's Identity event handler
+ * (`disposeGroup`), only when disposal is due. Server-only; idempotent;
+ * announced as `authorisation.group-disposed`, Identity's confirmation.
+ */
+export async function disposeAuthorisationGroup(input: { groupId: string, correlationId: string }): Promise<{ assignments: number, grants: number, changes: number }> {
+  return (await administration()).admin.disposeGroup(input)
+}
+
+/** As `disposeAuthorisationGroup`, for a closed tenant's custom roles (`authorisation.tenant-disposed`). */
+export async function disposeAuthorisationTenant(input: { tenantId: string, correlationId: string }): Promise<{ roles: number, changes: number }> {
+  return (await administration()).admin.disposeTenant(input)
+}
+
+/**
+ * Authorisation's part of a closing tenant's governance export, for the
+ * groups Identity's part names. Server-only: iam-integration's
+ * `tenantExportFromMembers` asks for it only after Identity has authorised
+ * the requester.
+ */
+export async function exportAuthorisationTenantData(input: { tenantId: string, groupIds: readonly string[], correlationId: string }): Promise<AuthorisationTenantExport> {
+  return (await administration()).admin.exportTenant(input)
 }
 
 /** The tenant's custom roles as a versioned document with its SHA-256 digest. Server-only: never an endpoint. */
