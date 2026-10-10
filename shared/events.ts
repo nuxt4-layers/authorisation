@@ -15,6 +15,7 @@ export const AUTHORISATION_EVENT_TYPES = [
   'authorisation.role-unassigned',
   'authorisation.grant-created',
   'authorisation.grant-revoked',
+  'authorisation.principal-erased',
 ] as const
 
 export type AuthorisationEventType = typeof AUTHORISATION_EVENT_TYPES[number]
@@ -25,7 +26,7 @@ export interface AuthorisationEvent {
   occurredAt: string
   /** The principal who asked (for `denied`) or who made the change. */
   actorPrincipalId: string
-  /** The principal a role assignment or grant is about, when different from the actor. */
+  /** The principal a role assignment, grant or erasure is about, when different from the actor. */
   subjectPrincipalId: string | null
   groupId: string | null
   resource: AuthorisationResourceRef | null

@@ -97,3 +97,16 @@ export interface AuthorisationGrant {
   /** ISO 8601 expiry, or null for a grant that lasts until it is revoked. */
   expiresAt: string | null
 }
+
+/**
+ * Authorisation's part of a data-subject access request (iam-integration's
+ * data-subject request process): the role assignments and grants a
+ * principal holds. Opaque identifiers, role and permission names only.
+ */
+export interface AuthorisationDataExport {
+  principalId: string
+  exportedAt: string
+  correlationId: string
+  roleAssignments: AuthorisationRoleAssignment[]
+  grants: { grantId: string, resource: { type: string, id: string }, permissions: readonly string[], expiresAt: string | null }[]
+}

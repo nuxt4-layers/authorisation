@@ -1,4 +1,5 @@
 import type {
+  AuthorisationDataExport,
   AuthorisationDecision,
   AuthorisationErrorBody,
   AuthorisationErrorCode,
@@ -123,4 +124,25 @@ export async function createAuthorisationGrant(input: { grant: AuthorisationGran
 
 export async function revokeAuthorisationGrant(input: { grantId: string, actorPrincipalId: string }): Promise<boolean> {
   return (await service()).revokeGrant(input)
+}
+
+/**
+ * Authorisation's part of a data-subject access request: the role
+ * assignments and grants the principal holds. Server-only: the host calls it
+ * through iam-integration's coordination adapter, for Profile. Answers null
+ * when the principal holds nothing.
+ */
+export async function exportAuthorisationData(input: { principalId: string, correlationId: string }): Promise<AuthorisationDataExport | null> {
+  const exported = await (await service()).exportPrincipal(input)
+  return exported.roleAssignments.length === 0 && exported.grants.length === 0 ? null : exported
+}
+
+/**
+ * Removes every role assignment and grant the principal holds, on Identity's
+ * `identity.closed` (account closure), unless a legal hold covers
+ * Authorisation's part. Decides nothing; idempotent. Announced as
+ * `authorisation.principal-erased`. Returns how many were removed.
+ */
+export async function eraseAuthorisationPrincipal(input: { principalId: string, actorPrincipalId: string }): Promise<{ assignments: number, grants: number }> {
+  return (await service()).erasePrincipal(input)
 }

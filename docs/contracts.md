@@ -161,7 +161,7 @@ A domain capability that must hide whether a resource exists answers *not found*
 
 ## 8. Events
 
-`authorisation.denied`, `authorisation.role-defined`, `authorisation.role-changed`, `authorisation.role-deleted`, `authorisation.role-assigned`, `authorisation.role-unassigned`, `authorisation.grant-created` and `authorisation.grant-revoked`. Events carry opaque IDs, the permission, role and reason only: never names, email addresses or resource attributes. Delivery is best effort and never changes an outcome.
+`authorisation.denied`, `authorisation.role-defined`, `authorisation.role-changed`, `authorisation.role-deleted`, `authorisation.role-assigned`, `authorisation.role-unassigned`, `authorisation.grant-created`, `authorisation.grant-revoked` and `authorisation.principal-erased`. Events carry opaque IDs, the permission, role and reason only: never names, email addresses or resource attributes. Delivery is best effort and never changes an outcome.
 
 ## 9. Policy
 
@@ -206,6 +206,7 @@ This is contract version 3, provided by package 0.3. Before 1.0, breaking change
 | `AuthorisationActorContext` without a status | `status: 'active' \| 'paused' \| 'suspended'` is required; it governs the personal group and caps every membership. A directory that omits it confers nothing |
 | Permission definitions: name, description, risk | Adds `effect: 'view' \| 'change'` (default `change`); `AuthorisationPermissionDefinitionInput` is the declared shape, `AuthorisationPermissionDefinition` the catalogue's |
 | Denial reasons | Adds `paused` |
+| — | Adds `exportAuthorisationData`, `eraseAuthorisationPrincipal`, `AuthorisationDataExport` and the `authorisation.principal-erased` event, for data-subject requests and account closure; no change to version 3's types |
 
 ## 12. Storage and server functions
 
@@ -221,6 +222,8 @@ Authorisation keeps custom roles (per tenant), role assignments (principal, grou
 | `assignAuthorisationRole({ principalId, groupId, roleId, scope?, actorPrincipalId })`, `unassignAuthorisationRole({ principalId, groupId, roleId \| null, actorPrincipalId })` | Change assignments: a built-in role, or a custom role of the group's tenant, in a group the directory knows. `authorisation.role-assigned` and `role-unassigned` |
 | `defineAuthorisationRole`, `deleteAuthorisationRole` | A tenant's custom roles: never a built-in ID, never an exact permission missing from the catalogue. `authorisation.role-defined`, `role-changed`, `role-deleted` |
 | `createAuthorisationGrant`, `revokeAuthorisationGrant` | Grants of exact, catalogued permissions of the resource's type. `authorisation.grant-created` and `grant-revoked` |
+| `exportAuthorisationData({ principalId, correlationId })` | Authorisation's part of a data-subject access request (`AuthorisationDataExport`): the principal's role assignments and the grants made to it; null when it holds none. Server-only, called through iam-integration's coordination adapter for Profile |
+| `eraseAuthorisationPrincipal({ principalId, actorPrincipalId })` | Removes every assignment and grant the principal holds, on Identity's `identity.closed` unless a legal hold covers Authorisation's part (iam-integration's account closure). Records the principal made for others keep its opaque identifier as their provenance. Idempotent; `authorisation.principal-erased` when something was removed |
 
 The functions that change roles, assignments and grants **decide nothing**: their caller has authorised the change. Today that is the host applying Identity's events through iam-integration's adapters (owners hold the `owner` role, members the group's default role); the layer's own administration endpoints, guarded by its `authorisation.*` permissions, are phase 3.
 
