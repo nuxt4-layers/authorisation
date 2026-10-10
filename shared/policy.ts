@@ -46,7 +46,10 @@ export const DEFAULT_AUTHORISATION_POLICY: AuthorisationPolicy = Object.freeze({
       { pattern: 'authorisation.grants:manage' },
       { pattern: 'authorisation.role-assignments:manage' },
       { pattern: 'authorisation.roles:manage' },
+      { pattern: 'authorisation.group-access:manage' },
     ],
+    // `*` covers `authorisation.role-assignments:manage` (medium): administrators
+    // request assignments, and each assignment's own risk sets its approval.
     administrator: [
       { pattern: '*' },
       { pattern: 'authorisation.grants:manage' },

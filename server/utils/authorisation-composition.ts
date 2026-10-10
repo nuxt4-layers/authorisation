@@ -1,13 +1,16 @@
 import type {
+  AuthorisationClock,
   AuthorisationDatabase,
+  AuthorisationDenialEvent,
   AuthorisationDirectory,
-  AuthorisationEvent,
   AuthorisationEventSink,
+  AuthorisationGovernance,
   AuthorisationPermissionCatalogue,
   AuthorisationPermissionDefinition,
   AuthorisationPermissionDefinitionInput,
   AuthorisationPolicy,
   AuthorisationPolicyInput,
+  AuthorisationSubjectResolver,
 } from '../../contracts'
 import {
   AUTHORISATION_PERMISSIONS,
@@ -16,6 +19,7 @@ import {
   permissionDefinitionSchema,
   resolveAuthorisationPolicy,
 } from '../../contracts'
+import { systemAuthorisationClock } from '../internal/clock'
 
 /**
  * Composition registry. The host application calls the `provide*` functions
@@ -23,13 +27,17 @@ import {
  *
  * Required ports fail closed: using one before it is supplied throws
  * `AuthorisationCompositionError` instead of falling back to an implicit
- * store or directory.
+ * store or directory. The clock is the one optional port with a safe
+ * default: the system clock.
  */
 
 let database: (AuthorisationDatabase & { schema: string }) | null = null
 let directory: AuthorisationDirectory | null = null
 let eventSink: AuthorisationEventSink | null = null
 let policy: AuthorisationPolicy | null = null
+let clock: AuthorisationClock | null = null
+let governance: AuthorisationGovernance | null = null
+let subjectResolver: AuthorisationSubjectResolver | null = null
 const catalogue = new Map<string, AuthorisationPermissionDefinition>(
   AUTHORISATION_PERMISSIONS.map(definition => [definition.name, definition]),
 )
@@ -52,11 +60,49 @@ export function provideAuthorisationDirectory(next: AuthorisationDirectory): voi
   directory = next
 }
 
+/**
+ * Identity's governance facts (contract 4; iam-integration's
+ * `authorisationGovernanceFromIdentity`). Required for change requests and
+ * decisions on them; decisions on permissions do not use it.
+ */
+export function provideAuthorisationGovernance(next: AuthorisationGovernance): void {
+  if (typeof next?.describeGroup !== 'function' || typeof next.isOwner !== 'function' || typeof next.countOwners !== 'function') {
+    throw new TypeError('provideAuthorisationGovernance expects describeGroup(input), isOwner(input) and countOwners(input) functions.')
+  }
+  governance = next
+}
+
+/** Who is signed in, for the layer's endpoints: the host adapts Authentication's `getAuthenticatedPrincipal(event)`. */
+export function provideAuthorisationSubjectResolver(next: AuthorisationSubjectResolver): void {
+  if (typeof next?.resolve !== 'function') {
+    throw new TypeError('provideAuthorisationSubjectResolver expects an object with a resolve(event) function.')
+  }
+  subjectResolver = next
+}
+
+/** Refused decisions (`authorisation.denied`), best effort. Every other event goes through the outbox. */
 export function provideAuthorisationEventSink(next: AuthorisationEventSink): void {
   if (typeof next?.emit !== 'function') {
     throw new TypeError('provideAuthorisationEventSink expects an object with an emit(event) function.')
   }
   eventSink = next
+}
+
+/**
+ * The suite's clock (iam-integration architecture §7): the host supplies the
+ * same clock to every member, or none. Trusted like a key: only the host's
+ * server code composes it, and no request can set or move it.
+ */
+export function provideAuthorisationClock(next: AuthorisationClock): void {
+  if (typeof next?.now !== 'function') {
+    throw new TypeError('provideAuthorisationClock expects an object with a now() function.')
+  }
+  clock = next
+}
+
+/** The host's clock, or the system clock when none is supplied. */
+export function useAuthorisationClock(): AuthorisationClock {
+  return clock ?? systemAuthorisationClock
 }
 
 /**
@@ -113,6 +159,16 @@ export function useAuthorisationDirectory(): AuthorisationDirectory {
   return directory
 }
 
+export function useAuthorisationGovernance(): AuthorisationGovernance {
+  if (!governance) throw new AuthorisationCompositionError('AuthorisationGovernance')
+  return governance
+}
+
+export function useAuthorisationSubjectResolver(): AuthorisationSubjectResolver {
+  if (!subjectResolver) throw new AuthorisationCompositionError('AuthorisationSubjectResolver')
+  return subjectResolver
+}
+
 /** The permission catalogue: this layer's own permissions plus those the host supplied. */
 export function useAuthorisationCatalogue(): AuthorisationPermissionCatalogue {
   return catalogue
@@ -125,10 +181,10 @@ export function useAuthorisationPolicy(): AuthorisationPolicy {
 }
 
 /**
- * Emits an event to the host's sink, if one is supplied. Never throws: audit
- * delivery must not change the outcome of the operation that produced it.
+ * Delivers a refused decision to the host's sink, if one is supplied. Never
+ * throws: audit delivery must not change the decision.
  */
-export async function emitAuthorisationEvent(event: AuthorisationEvent): Promise<void> {
+export async function emitAuthorisationDenial(event: AuthorisationDenialEvent): Promise<void> {
   if (!eventSink) return
   try {
     await eventSink.emit(event)
@@ -144,6 +200,9 @@ export function clearAuthorisationComposition(): void {
   directory = null
   eventSink = null
   policy = null
+  clock = null
+  governance = null
+  subjectResolver = null
   catalogue.clear()
   for (const definition of AUTHORISATION_PERMISSIONS) catalogue.set(definition.name, definition)
 }

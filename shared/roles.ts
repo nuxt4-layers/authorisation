@@ -82,6 +82,12 @@ export interface AuthorisationRoleAssignment {
   groupId: string
   roleId: string
   scope: AuthorisationRoleAssignmentScope
+  /**
+   * ISO 8601 end of a time-limited assignment (contract 4), or null. Past
+   * it, the assignment confers nothing, at once, before maintenance removes
+   * it.
+   */
+  expiresAt: string | null
 }
 
 export type AuthorisationGrantSubject =
@@ -90,7 +96,14 @@ export type AuthorisationGrantSubject =
 
 /** Permissions on one resource, given to a principal or to a group's members. */
 export interface AuthorisationGrant {
-  resource: { type: string, id: string }
+  /**
+   * The resource. `owningGroupId` (contract 4) binds the grant to the group
+   * that owned the resource when it was shared: a grant counts only for a
+   * resource whose owning group, as its domain capability describes it at
+   * decision time, is that group. Every grant made through a change has
+   * one; a grant made by the host's own server code may leave it out.
+   */
+  resource: { type: string, id: string, owningGroupId?: string | null }
   subject: AuthorisationGrantSubject
   /** Exact permission names; grants never use wildcards. */
   permissions: readonly string[]
@@ -109,4 +122,6 @@ export interface AuthorisationDataExport {
   correlationId: string
   roleAssignments: AuthorisationRoleAssignment[]
   grants: { grantId: string, resource: { type: string, id: string }, permissions: readonly string[], expiresAt: string | null }[]
+  /** Pending changes the principal requested, is the beneficiary of, or decided (contract 4). */
+  changes: { changeId: string, type: string, involvement: 'requester' | 'beneficiary' | 'approver', state: string, createdAt: string }[]
 }

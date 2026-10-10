@@ -13,7 +13,7 @@
 
 A Nuxt 4 foundation layer that decides whether a signed-in principal may perform an action on a resource. It is governed by [`nuxt4-layers/platform-architecture`](https://github.com/nuxt4-layers/platform-architecture) (Identity and Authorization Architecture, ADR-0001, ADR-0002).
 
-**Status:** contract version 3. The contract, composition ports, decision engine, storage and server functions are in place, including view-only access for paused members; administration endpoints and pages follow (see [docs/roadmap.md](docs/roadmap.md)).
+**Status:** contract version 4. The contract, composition ports, decision engine, storage and server functions are in place, with view-only access for paused members, and access administration: changes with approvals, default roles, time-limited assignments, access reviews, role documents, a transactional outbox, endpoints and default pages (see [docs/roadmap.md](docs/roadmap.md)).
 
 ## What it does
 
@@ -27,6 +27,7 @@ subject + permission + resource + group context + roles + grants -> decision
 - **Leaving a group ends the access it gave**, including to what the leaver created: creating something is provenance, not ownership. Joining one gives access up to the roles held there.
 - **Grants** share one resource with another principal or group.
 - **Risk levels** demand stronger authentication: `high` needs AAL2, `critical` a recent, phishing-resistant sign-in.
+- **Changes need a second person** when they are risky: every change to roles, assignments, sharing and a group's access is requested, checked against the rules (no self-grant; owners follow Identity), approved where its risk demands it, and applied with its events in one transaction.
 - Deny by default. No superuser. Enforcement is on the server only.
 
 ## What it does not do
@@ -47,9 +48,19 @@ export default defineNuxtConfig({
 export default defineNitroPlugin(() => {
   provideAuthorisationDatabase({ dialect: 'postgres', pool })
   provideAuthorisationDirectory(identityDirectoryAdapter)
+  provideAuthorisationGovernance(identityGovernanceAdapter) // iam-integration's authorisationGovernanceFromIdentity
+  provideAuthorisationSubjectResolver({ resolve: event => getAuthenticatedPrincipal(event) })
   provideAuthorisationPermissions(ORDER_PERMISSIONS)
 })
 ```
+
+```css
+/* the host's stylesheet, when it keeps the default pages */
+@import "@nuxt4-layers/theme-manager/presentation.css";
+@import "@nuxt4-layers/authorisation/tailwind.css";
+```
+
+Set `NUXT_AUTHORISATION_BASE_URL` to the host's origin, and schedule `runAuthorisationMaintenance()` and `relayAuthorisationOutbox({ publish })`. The default pages live at `/groups/:groupId/access`, `/groups/:groupId/sharing`, `/tenants/:tenantId/roles` and `/access-changes/:changeId`; move or disable them under `authorisation.pages` in `nuxt.config.ts`.
 
 Domain capabilities declare their permissions, e.g. `{ name: 'orders:process_refund', description: 'Refund an order', risk: 'high', effect: 'change' }`, and import types only from `@nuxt4-layers/authorisation/contracts`.
 
@@ -68,6 +79,7 @@ pnpm install
 pnpm dev:prepare
 pnpm check             # nuxt typecheck + vitest
 pnpm build:playground  # proves the layer composes in a host
+pnpm test:e2e          # the default pages in Chromium, with axe (needs AUTHORISATION_TEST_DATABASE_URL)
 ```
 
 Requires Node 22 and pnpm 10.

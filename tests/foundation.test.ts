@@ -18,19 +18,21 @@ describe('Authorisation repository foundation', () => {
       '.': './nuxt.config.ts',
       './contracts': './contracts/index.ts',
       './capability': './capability.json',
+      './presentation': './presentation/index.ts',
+      './tailwind.css': './tailwind.css',
     })
     expect(manifest.publicExports).toEqual(Object.keys(pkg.exports))
   })
 
   it('provides the Authorisation contract and requires Authentication and Identity by contract only', () => {
-    expect(manifest.provides).toEqual([{ capability: 'Authorisation', contractVersion: '3' }])
+    expect(manifest.provides).toEqual([{ capability: 'Authorisation', contractVersion: '4' }])
     expect(manifest.requires.map((r: { capability: string }) => r.capability)).toEqual(['Authentication', 'Identity'])
     expect(Object.keys(pkg.dependencies ?? {}).filter(name => name.startsWith('@nuxt4-layers/'))).toEqual([])
   })
 
-  it('declares database, directory and permissions as required ports and the rest as optional', () => {
+  it('declares database, directory, governance, subject resolver and permissions as required ports and the rest as optional', () => {
     const required = manifest.ports.filter((p: { optional: boolean }) => !p.optional).map((p: { port: string }) => p.port)
-    expect(required).toEqual(['AuthorisationDatabase', 'AuthorisationDirectory', 'AuthorisationPermissions'])
+    expect(required).toEqual(['AuthorisationDatabase', 'AuthorisationDirectory', 'AuthorisationGovernance', 'AuthorisationSubjectResolver', 'AuthorisationPermissions'])
   })
 
   it('declares every runtime import as a dependency rather than relying on the host', () => {

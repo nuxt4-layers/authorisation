@@ -70,7 +70,7 @@ const order = (owningGroupId: string, extra: Partial<AuthorisationResource> = {}
   ({ type: 'orders', id: 'order-1', owningGroupId, ...extra })
 
 const assign = (groupId: string, roleId: string, scope: AuthorisationRoleAssignmentScope = 'group', principalId = 'alice'): AuthorisationRoleAssignment =>
-  ({ principalId, groupId, roleId, scope })
+  ({ principalId, groupId, roleId, scope, expiresAt: null })
 
 function decide(overrides: Partial<AuthorisationFacts> & { resource: AuthorisationResource }) {
   return decideAuthorisation({
@@ -429,6 +429,23 @@ describe('decision: grants', () => {
     expect(decide({ actor: alice('sales'), grants: expired, resource: order('sales') })).toMatchObject({ allowed: false })
     const malformed = [grant({ kind: 'principal', principalId: 'alice' }, { expiresAt: 'tomorrow' })]
     expect(decide({ actor: alice('sales'), grants: malformed, resource: order('sales') })).toMatchObject({ allowed: false })
+  })
+
+  it('counts a grant bound to an owning group only while that group owns the resource (contract 4)', () => {
+    const bound = [grant({ kind: 'principal', principalId: 'alice' }, { resource: { type: 'orders', id: 'order-1', owningGroupId: 'sales' } })]
+    expect(decide({ actor: alice('sales'), grants: bound, resource: order('sales') })).toMatchObject({ allowed: true, via: 'grant' })
+    // A grant whose requester claimed the resource for another group confers nothing on the real one.
+    const forged = [grant({ kind: 'principal', principalId: 'alice' }, { resource: { type: 'orders', id: 'order-1', owningGroupId: 'personal-alice' } })]
+    expect(decide({ actor: alice('sales'), grants: forged, resource: order('sales') })).toMatchObject({ allowed: false, reason: 'not-permitted' })
+  })
+})
+
+describe('decision: time-limited assignments (contract 4)', () => {
+  it('confers nothing past its end, before maintenance removes it, and treats a malformed end as passed', () => {
+    const until = (expiresAt: string) => [{ ...assign('sales', 'viewer'), expiresAt }]
+    expect(decide({ actor: alice('sales'), assignments: until('2026-10-08T12:00:01.000Z'), resource: order('sales') })).toMatchObject({ allowed: true, via: 'role' })
+    expect(decide({ actor: alice('sales'), assignments: until('2026-10-08T12:00:00.000Z'), resource: order('sales') })).toMatchObject({ allowed: false, reason: 'not-permitted' })
+    expect(decide({ actor: alice('sales'), assignments: until('soon'), resource: order('sales') })).toMatchObject({ allowed: false })
   })
 })
 

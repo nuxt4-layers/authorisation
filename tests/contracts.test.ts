@@ -23,8 +23,17 @@ const contractFiles = [...files('contracts'), ...files('shared')]
 describe('Authorisation public contract', () => {
   it('exports the documented runtime values', () => {
     expect(Object.keys(contracts).sort()).toEqual([
+      'APPROVAL_REFUSALS',
+      'AUTHORISATION_API_PREFIX',
+      'AUTHORISATION_APPROVAL_ROUTES',
+      'AUTHORISATION_CHANGES',
+      'AUTHORISATION_CHANGE_STATES',
+      'AUTHORISATION_CHANGE_TARGETS',
+      'AUTHORISATION_CHANGE_TYPES',
+      'AUTHORISATION_CORRELATION_HEADER',
       'AUTHORISATION_ERROR_CODES',
       'AUTHORISATION_ERROR_STATUS',
+      'AUTHORISATION_EVENT_PAYLOADS',
       'AUTHORISATION_EVENT_TYPES',
       'AUTHORISATION_MAX_STALENESS_SECONDS',
       'AUTHORISATION_MEMBERSHIP_STATUSES',
@@ -32,21 +41,56 @@ describe('Authorisation public contract', () => {
       'AUTHORISATION_PERMISSION_EFFECTS',
       'AUTHORISATION_PRINCIPAL_STATUSES',
       'AUTHORISATION_RISK_LEVELS',
+      'AUTHORISATION_ROLE_DOCUMENT_FORMAT',
+      'AUTHORISATION_ROLE_DOCUMENT_VERSION',
       'AuthorisationCompositionError',
       'AuthorisationFailure',
       'BUILT_IN_ROLE_IDS',
+      'CHANGE_REFUSALS',
       'CONDITION_OPERATORS',
       'DEFAULT_AUTHORISATION_POLICY',
+      'DEFAULT_GROUP_DEFAULT_ROLES',
+      'IDENTIFIER_PATTERN',
+      'OPEN_CHANGE_STATES',
+      'REASON_CODE_PATTERN',
+      'REVIEW_INTERVAL_DAYS',
       'ROLE_ASSIGNMENT_SCOPES',
+      'STEP_UP_REQUIREMENTS',
+      'UUID_PATTERN',
+      'approvalRecordSchema',
+      'approvalRequirement',
+      'assignmentRisk',
+      'assuranceRecordSchema',
+      'authorisationEventSchema',
+      'canonicalJson',
+      'changeRequestSchema',
+      'chooseRoute',
       'conditionSchema',
+      'correlationIdSchema',
+      'defaultRolesSchema',
+      'higherRisk',
+      'identifierSchema',
+      'instantSchema',
       'isAuthorisationErrorCode',
       'isPermissionName',
       'isPermissionPattern',
+      'isSelfGrant',
+      'justificationReferenceSchema',
+      'justificationSchema',
+      'meetsStepUp',
+      'pendingChangeSchema',
       'permissionDefinitionSchema',
       'permissionPatternMatches',
+      'reasonCodeSchema',
+      'refuseApproval',
       'resolveAuthorisationPolicy',
       'roleDefinitionSchema',
+      'roleDocumentSchema',
       'rolePermissionSchema',
+      'roleRisk',
+      'sha256DigestSchema',
+      'uuidSchema',
+      'versionSchema',
     ])
   })
 
@@ -85,6 +129,15 @@ describe('Authorisation public contract', () => {
     for (const type of contracts.AUTHORISATION_EVENT_TYPES) {
       expect(type).toMatch(/^authorisation\.[a-z-]+$/)
     }
+    // Decisions change nothing: a refusal goes to the best-effort sink, never the outbox.
+    expect(contracts.AUTHORISATION_EVENT_TYPES).not.toContain('authorisation.denied')
+  })
+
+  it('reports a conflict as 409, with a rule code only for conflicts and validation failures', () => {
+    expect(contracts.AUTHORISATION_ERROR_STATUS.conflict).toBe(409)
+    expect(new contracts.AuthorisationFailure('conflict', 'self-grant').reason).toBe('self-grant')
+    expect(new contracts.AuthorisationFailure('forbidden', 'self-grant').reason).toBeNull()
+    expect(new contracts.AuthorisationFailure('conflict', 'Not A Code').reason).toBeNull()
   })
 
   it('does not grant platform-wide bypasses: no superuser role', () => {
