@@ -26,6 +26,8 @@ function describe(c: AuthorisationPendingChange): string {
       const a = target as AuthorisationChangeTarget<'role.assign'>
       return [t('authorisation.change.target.role', { role: a.roleId }), t('authorisation.change.target.scope', { scope: t(`authorisation.scope.${a.scope ?? 'group'}`) }), ...(a.expiresAt ? [t('authorisation.change.target.until', { date: when(a.expiresAt) })] : [])].join(', ')
     }
+    case 'role.activate':
+      return t('authorisation.change.target.activation', { role: String(target.roleId), minutes: String(target.minutes) })
     case 'role.unassign':
     case 'assignment.confirm':
       return t('authorisation.change.target.role', { role: String(target.roleId) })

@@ -7,6 +7,7 @@ import type {
   AuthorisationPendingChange,
   AuthorisationRoleDocument,
   AuthorisationSelfView,
+  AuthorisationVisibleGroups,
   AuthorisationSubject,
   AuthorisationTenantExport,
   AuthorisationTenantRoles,
@@ -132,6 +133,16 @@ export function getAuthorisationAdministration() {
     tenantRoles: async (input: { subject: AuthorisationSubject, tenantId: string }): Promise<AuthorisationTenantRoles> => (await administration()).admin.tenantRoles(input),
     self: async (input: { subject: AuthorisationSubject }): Promise<AuthorisationSelfView> => (await administration()).admin.self(input),
   }
+}
+
+/**
+ * The groups in which the subject holds `permission` now (ADR-0006's visible
+ * scopes; docs/contracts.md §15a), for a host's listing and search pages.
+ * Each group is decided as `authorise` decides it; the list is a convenience,
+ * and every action is still decided on its own.
+ */
+export async function listAuthorisationVisibleGroups(input: { subject: AuthorisationSubject, permission: string }): Promise<AuthorisationVisibleGroups> {
+  return (await administration()).admin.visibleGroups(input)
 }
 
 /** A group's access review (`authorisation.role-assignments:manage`): assignments with when and by whom, end dates, confirmations and overdue marks. */

@@ -166,6 +166,8 @@ function findSource(
     if (a.principalId !== subject.principalId) continue
     // A time-limited assignment past its end confers nothing, whether or not maintenance has removed it.
     if (a.expiresAt != null && !(Date.parse(a.expiresAt) > now)) continue
+    // An eligible assignment confers only while activated, whether or not maintenance has caught up.
+    if (a.eligible && !(a.activeUntil != null && Date.parse(a.activeUntil) > now)) continue
     if (a.groupId !== group.groupId && !(a.scope === 'group-and-descendants' && group.lineage.includes(a.groupId))) continue
     const standing = inResourceTenant(a.groupId)
     if (standing && covers(findRole(a.roleId, group.tenantId, facts))) consider('role', standing)

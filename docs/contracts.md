@@ -179,8 +179,9 @@ Every event is `{ eventId, type, occurredAt, correlationId, actorPrincipalId, da
 | `authorisation.change-requested` | Change, type, tenant, group, requester, beneficiary, risk, route, state, required approvals, delay end, expiry |
 | `authorisation.change-decided` | As above, with the outcome: `applied`, `rejected`, `expired` or `cancelled` |
 | `authorisation.change-held` | As above, with `heldUntil` |
-| `authorisation.role-assigned`, `authorisation.role-unassigned`, `authorisation.role-expired` | Principal, group, role, scope, end date, the change (or null) |
+| `authorisation.role-assigned`, `authorisation.role-unassigned`, `authorisation.role-expired` | Principal, group, role, scope, end date, `eligible: true` for an eligible assignment (§20), the change (or null) |
 | `authorisation.assignment-confirmed` | Principal, group, role, when, the change |
+| `authorisation.role-activated` | Principal, group, role, the end of the activation, the change (§20) |
 | `authorisation.grant-created`, `authorisation.grant-revoked` | Grant, resource type and identifier, owning group, holder, permissions, expiry, the change |
 | `authorisation.role-defined`, `authorisation.role-changed`, `authorisation.role-deleted` | Tenant, role, SHA-256 of the role's canonical JSON (null on deletion), the change |
 | `authorisation.roles-imported` | Tenant, the document's digest, the roles defined, changed and deleted |
@@ -254,6 +255,7 @@ This is contract version 4, provided by package 0.4. Before 1.0, breaking change
 | Grant resources `{ type, id }` | Adds the optional `owningGroupId` the grant is bound to |
 | — | A group's default roles and review interval, access reviews, time-limited assignments, maintenance, role documents (§18); `exportAuthorisationData` adds the changes a principal is part of |
 | — | End of life (§19): `disposeAuthorisationGroup`, `disposeAuthorisationTenant`, `exportAuthorisationTenantData` and `AuthorisationTenantExport`; the optional legal-hold port (`AuthorisationLegalHolds`, `provideAuthorisationLegalHolds`); `retention` and `riskTreatment` in the policy; the `authorisation.group-disposed`, `authorisation.tenant-disposed` and `authorisation.retention-applied` events; `runAuthorisationMaintenance` returns `retention` counts. No change to version 4's existing types |
+| — | Just-in-time elevation and visible scopes (§20): `eligible` and `activeUntil` on assignments and their views, the `role.activate` change type, `AUTHORISATION_ACTIVATION_MAX_MINUTES`, the `authorisation.role-activated` event, `listAuthorisationVisibleGroups`, `AuthorisationVisibleGroups` and `GET /api/authorisation/visible-groups`. Additive: nothing existing changes |
 
 ## 12. Storage and server functions
 
@@ -396,3 +398,12 @@ Authorisation's part of iam-integration's [group deletion](https://github.com/nu
 **Governance export.** `exportAuthorisationTenantData({ tenantId, groupIds, correlationId })` returns `AuthorisationTenantExport`: the tenant's custom roles as a role document (§18), and for each group Identity's part names, its assignments with provenance, the grants on what it owns, and its access settings. Server-only.
 
 **Retention.** `runAuthorisationMaintenance` also deletes delivered outbox events older than `retention.outboxDays`, and decided changes older than `retention.changeDays` whose group no legal hold covers, asking the host's legal-hold port (`provideAuthorisationLegalHolds`, from iam-integration's `legalHoldsFromMembers`). Without the port, or when it fails, it keeps every change. Assignments past their end are already removed as they lapse (§18); assignments and grants in force have no schedule. A run that deleted anything writes `authorisation.retention-applied` with counts only.
+
+## 20. Just-in-time elevation and visible scopes
+
+**Eligible assignments.** `role.assign` may carry `eligible: true` (iam-integration improvement register item 7). An eligible assignment is made exactly as any other, with the same risk, approval route and end date, but it confers nothing (§6) until its holder activates it. Re-assigning a role changes whether it is eligible and ends any activation.
+
+**Activation.** `role.activate` (`{ principalId, groupId, roleId, minutes }`, 5 to `AUTHORISATION_ACTIVATION_MAX_MINUTES` = 480 minutes) is requested only by the holder for their own eligible assignment; anyone else is `forbidden`. It is not a self-grant: the access was granted, with its approval, when the assignment was made eligible. The holder need not hold `authorisation.role-assignments:manage`. Its risk is the assignment's (its role, raised to `critical` for `group-and-descendants`), so the route, approvers, step-up and recovery hold follow §15 as for assigning that role: an activation of a `high` or `critical` role waits for an approver who is neither the holder nor controlled by them. When it applies, the assignment confers until `minutes` after that moment, never beyond its own `expiresAt`, and `authorisation.role-activated` records the end. An assignment that is not eligible, or past its end, is refused with `conflict` (`not-eligible`), when requested and again when applied. There is no early deactivation: removing the assignment or letting the activation end does that.
+
+**Visible scopes.** `listAuthorisationVisibleGroups({ subject, permission })` and `GET /api/authorisation/visible-groups?permission=` answer `AuthorisationVisibleGroups` (`{ permission, groupIds }`): the groups in which the subject holds the permission now, for listing and search pages (ADR-0006's visible scopes) instead of a decision per row. The candidates are the subject's memberships in effect, their personal group and the groups of their live assignments, at most 1000, read at `strong` consistency; each is decided as §6 decides, on the group itself as the resource. Descendants reached through a `group-and-descendants` assignment are not listed: the layer holds no hierarchy, so a host lists them through Identity and decides each. An unknown permission lists nothing. The answer is for building queries only; every action on a row is still decided.
+

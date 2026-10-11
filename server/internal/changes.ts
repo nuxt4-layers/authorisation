@@ -246,6 +246,17 @@ export function createChanges(deps: ChangesDependencies) {
         if (!(await s.assignment(target))) throw conflict('not-assigned')
         return { risk: 'low' }
       }
+      case 'role.activate': {
+        // The requester's own eligible assignment, still in force, while they are a member; the risk is the assignment's.
+        const target = change.target as AuthorisationChangeTarget<'role.activate'>
+        const held = await s.assignment(target)
+        if (!held?.eligible) throw conflict('not-eligible')
+        if (held.expiresAt && !(Date.parse(held.expiresAt) > at.getTime())) throw conflict('not-eligible')
+        const role = await findRole(q, change.tenantId, target.roleId)
+        if (!role) throw conflict('unknown-role')
+        if (!(await memberOf(target.principalId, target.groupId))) throw conflict('not-a-member')
+        return { risk: assignmentRisk(riskOfRole(role), held.scope) }
+      }
       case 'grant.create': {
         const { grant } = change.target as AuthorisationChangeTarget<'grant.create'>
         try {
@@ -332,6 +343,10 @@ export function createChanges(deps: ChangesDependencies) {
       }
       case 'role.unassign':
       case 'assignment.confirm':
+        return { group: await known(request.target.groupId), beneficiaryId: request.target.principalId, target: request.target }
+      case 'role.activate':
+        // Only one's own eligible assignment is activated.
+        if (request.target.principalId !== subject.principalId) throw new AuthorisationFailure('forbidden')
         return { group: await known(request.target.groupId), beneficiaryId: request.target.principalId, target: request.target }
       case 'grant.create': {
         const { grant } = request.target
@@ -463,7 +478,7 @@ export function createChanges(deps: ChangesDependencies) {
     const inPersonal = facts.kind === 'personal' && facts.personalOfPrincipalId === change.requesterId
     if (isSelfGrant({ type: change.type, requesterId: change.requesterId, beneficiaryId: change.beneficiaryId, inRequestersPersonalGroup: inPersonal })) throw conflict('self-grant')
     const permission = AUTHORISATION_CHANGES[change.type].permission
-    if (!(await service.qualifiesNow(change.requesterId, permission, groupResource(permission, change.groupId)))) throw conflict('requester-not-qualified')
+    if (change.type !== 'role.activate' && !(await service.qualifiesNow(change.requesterId, permission, groupResource(permission, change.groupId)))) throw conflict('requester-not-qualified')
     const { risk } = await assess(client, { type: change.type, target: change.target, tenantId: change.tenantId, groupId: change.groupId }, at)
     if (AUTHORISATION_RISK_LEVELS.indexOf(risk) > AUTHORISATION_RISK_LEVELS.indexOf(change.risk)) throw conflict('risk-changed')
 
@@ -472,7 +487,17 @@ export function createChanges(deps: ChangesDependencies) {
     switch (change.type) {
       case 'role.assign': {
         const target = change.target as AuthorisationChangeTarget<'role.assign'>
-        await writer.assign({ principalId: target.principalId, groupId: target.groupId, roleId: target.roleId, scope: target.scope ?? 'group', expiresAt: target.expiresAt ?? null })
+        await writer.assign({ principalId: target.principalId, groupId: target.groupId, roleId: target.roleId, scope: target.scope ?? 'group', expiresAt: target.expiresAt ?? null, ...(target.eligible ? { eligible: true } : {}) })
+        return
+      }
+      case 'role.activate': {
+        const target = change.target as AuthorisationChangeTarget<'role.activate'>
+        // From when it applies, never longer than the assignment itself.
+        const held = await writer.store.assignment(target, true)
+        let until = new Date(at.getTime() + target.minutes * 60_000)
+        if (held?.expiresAt && Date.parse(held.expiresAt) < until.getTime()) until = new Date(held.expiresAt)
+        if (!(await writer.store.activate(target, until))) throw conflict('not-eligible')
+        await writer.emit({ type: 'authorisation.role-activated', data: { principalId: target.principalId, groupId: target.groupId, roleId: target.roleId, activeUntil: until.toISOString(), changeId: change.changeId } })
         return
       }
       case 'role.unassign': {
@@ -542,7 +567,8 @@ export function createChanges(deps: ChangesDependencies) {
       const located = await locate(request, subject)
       const { group } = located
       const permission = AUTHORISATION_CHANGES[request.type].permission
-      await authoriseOn(subject, permission, group.groupId)
+      // An activation needs the eligible assignment (checked by `assess`), not the approvers' permission.
+      if (request.type !== 'role.activate') await authoriseOn(subject, permission, group.groupId)
 
       const facts = await governed(group.groupId, subject.principalId, correlationId)
       if (!facts || facts.tenantId !== group.tenantId) throw new AuthorisationFailure('forbidden')

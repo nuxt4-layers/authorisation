@@ -48,6 +48,8 @@ const assignmentFacts = {
   roleId,
   scope: z.enum(ROLE_ASSIGNMENT_SCOPES),
   expiresAt: instantSchema.nullable(),
+  /** Present and true for an eligible (just-in-time) assignment. */
+  eligible: z.literal(true).optional(),
   /** The change that made it, or null when the host's own server code did (Identity's events). */
   changeId: uuidSchema.nullable(),
 }
@@ -87,6 +89,8 @@ const payloads = {
   'authorisation.role-assigned': z.strictObject(assignmentFacts),
   'authorisation.role-unassigned': z.strictObject(assignmentFacts),
   'authorisation.role-expired': z.strictObject(assignmentFacts),
+  /** An eligible assignment activated, until `activeUntil` (just-in-time elevation). */
+  'authorisation.role-activated': z.strictObject({ principalId: id, groupId: id, roleId, activeUntil: instantSchema, changeId: uuidSchema }),
   'authorisation.assignment-confirmed': z.strictObject({ principalId: id, groupId: id, roleId, confirmedAt: instantSchema, changeId: uuidSchema }),
   'authorisation.grant-created': z.strictObject(grantFacts),
   'authorisation.grant-revoked': z.strictObject(grantFacts),

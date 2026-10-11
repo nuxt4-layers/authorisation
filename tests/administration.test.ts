@@ -35,6 +35,7 @@ import {
   getAuthorisationChanges,
   importAuthorisationRoles,
   listAuthorisationAccessReview,
+  listAuthorisationVisibleGroups,
   migrateAuthorisationDatabase,
   relayAuthorisationOutbox,
   runAuthorisationMaintenance,
@@ -444,6 +445,57 @@ describe.skipIf(!hasDatabase)('access administration on PostgreSQL', () => {
       await relayed()
       expect(await runAuthorisationMaintenance()).toMatchObject({ expiredAssignments: 1 })
       expect((await relayed()).filter(e => e.type === 'authorisation.role-expired')).toEqual([expect.objectContaining({ actorPrincipalId: null, data: expect.objectContaining({ principalId: 'val', roleId: 'viewer' }) })])
+    })
+  })
+
+  describe('just-in-time elevation (docs/contracts.md §19)', () => {
+    it('lets an eligible assignment confer nothing until its holder activates it with approval, then only for the time asked', async () => {
+      member('jo', 'sales')
+      const eligible = await request(subject('adam', { phishingResistant: false }), 'role.assign', { principalId: 'jo', groupId: 'sales', roleId: 'administrator', eligible: true })
+      expect(eligible).toMatchObject({ risk: 'high', state: 'awaiting-approval' })
+      expect(await approve(subject('amy', { phishingResistant: false }), eligible.changeId)).toMatchObject({ state: 'applied' })
+      expect(await may('jo', 'authorisation.grants:manage', 'sales')).toBe(false)
+      expect((await relayed()).find(e => e.type === 'authorisation.role-assigned')).toMatchObject({ data: { principalId: 'jo', roleId: 'administrator', eligible: true } })
+
+      // The holder asks; it is no self-grant, but it still needs an approver other than themselves.
+      const activation = await request(subject('jo', { phishingResistant: false }), 'role.activate', { principalId: 'jo', groupId: 'sales', roleId: 'administrator', minutes: 60 })
+      expect(activation).toMatchObject({ type: 'role.activate', risk: 'high', route: 'approvers', state: 'awaiting-approval', requesterId: 'jo', beneficiaryId: 'jo' })
+      await expect(approve(subject('jo'), activation.changeId)).rejects.toMatchObject({ code: 'conflict' })
+      expect(await may('jo', 'authorisation.grants:manage', 'sales')).toBe(false)
+      expect(await approve(subject('amy', { phishingResistant: false }), activation.changeId)).toMatchObject({ state: 'applied' })
+      expect(await may('jo', 'authorisation.grants:manage', 'sales')).toBe(true)
+      const activated = (await relayed()).find(e => e.type === 'authorisation.role-activated')
+      expect(activated).toMatchObject({ actorPrincipalId: 'jo', data: { principalId: 'jo', groupId: 'sales', roleId: 'administrator', activeUntil: new Date(at.getTime() + 3_600_000).toISOString(), changeId: activation.changeId } })
+      hoursLater(1)
+      expect(await may('jo', 'authorisation.grants:manage', 'sales')).toBe(false)
+    })
+
+    it('activates a medium-risk eligible role at once, never beyond the assignment\'s own end', async () => {
+      member('jen', 'sales')
+      const end = new Date(at.getTime() + 30 * 60_000).toISOString()
+      expect(await request(weak('adam'), 'role.assign', { principalId: 'jen', groupId: 'sales', roleId: 'member', eligible: true, expiresAt: end })).toMatchObject({ state: 'applied' })
+      expect(await may('jen', 'orders:create', 'sales')).toBe(false)
+      await relayed()
+      expect(await request(weak('jen'), 'role.activate', { principalId: 'jen', groupId: 'sales', roleId: 'member', minutes: 120 })).toMatchObject({ risk: 'medium', route: 'none', state: 'applied' })
+      expect(await may('jen', 'orders:create', 'sales')).toBe(true)
+      expect((await relayed()).find(e => e.type === 'authorisation.role-activated')).toMatchObject({ data: { activeUntil: end } })
+    })
+
+    it('refuses activating an assignment that is not eligible, or someone else\'s', async () => {
+      await expect(request(weak('mia'), 'role.activate', { principalId: 'mia', groupId: 'sales', roleId: 'member', minutes: 30 })).rejects.toMatchObject({ code: 'conflict', reason: 'not-eligible' })
+      await expect(request(weak('mia'), 'role.activate', { principalId: 'mia', groupId: 'sales', roleId: 'viewer', minutes: 30 })).rejects.toMatchObject({ code: 'conflict', reason: 'not-eligible' })
+      await expect(request(subject('adam'), 'role.activate', { principalId: 'jo', groupId: 'sales', roleId: 'administrator', minutes: 30 })).rejects.toMatchObject({ code: 'forbidden' })
+      await expect(request(subject('jo'), 'role.activate', { principalId: 'jo', groupId: 'sales', roleId: 'administrator', minutes: 481 })).rejects.toMatchObject({ code: 'validation-failed' })
+    })
+  })
+
+  describe('visible scopes', () => {
+    it('lists the groups in which the subject holds a permission now, and nothing for an unknown permission', async () => {
+      expect(await listAuthorisationVisibleGroups({ subject: subject('tara'), permission: 'authorisation.grants:manage' })).toEqual({ permission: 'authorisation.grants:manage', groupIds: ['team'] })
+      expect((await listAuthorisationVisibleGroups({ subject: subject('olive'), permission: 'orders:view' })).groupIds).toEqual(['company'])
+      expect((await listAuthorisationVisibleGroups({ subject: subject('jo'), permission: 'authorisation.grants:manage' })).groupIds).toEqual([])
+      expect((await listAuthorisationVisibleGroups({ subject: subject('tara'), permission: 'orders:fly' })).groupIds).toEqual([])
+      await expect(listAuthorisationVisibleGroups({ subject: subject('tara'), permission: 'nonsense' })).rejects.toMatchObject({ code: 'validation-failed' })
     })
   })
 

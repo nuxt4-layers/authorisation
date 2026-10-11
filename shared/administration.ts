@@ -30,6 +30,10 @@ export interface AuthorisationAssignmentView {
   assignedBy: string | null
   confirmedAt: string | null
   confirmedBy: string | null
+  /** Just-in-time elevation: present and true for an eligible assignment, which confers nothing until activated. */
+  eligible?: boolean
+  /** The end of an eligible assignment's current activation, or null. */
+  activeUntil?: string | null
 }
 
 /** One line of a group's access review. */
@@ -97,6 +101,12 @@ export interface AuthorisationRoleView {
 export interface AuthorisationTenantRoles {
   tenantId: string
   roles: AuthorisationRoleView[]
+}
+
+/** The groups in which a subject holds a permission now (ADR-0006's visible scopes), for listing and search pages. */
+export interface AuthorisationVisibleGroups {
+  permission: string
+  groupIds: string[]
 }
 
 /** The signed-in principal's own assignments: hints for the user experience only. */

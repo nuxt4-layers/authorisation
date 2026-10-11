@@ -196,6 +196,7 @@ export type {
   AuthorisationRoleDocument,
   AuthorisationRoleView,
   AuthorisationSelfView,
+  AuthorisationVisibleGroups,
   AuthorisationTenantExport,
   AuthorisationTenantRoles,
 } from '../shared/administration'
