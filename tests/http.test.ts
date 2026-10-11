@@ -58,6 +58,7 @@ describe('the /api/authorisation endpoints', () => {
       'GET /api/authorisation/groups/:groupId/grants',
       'GET /api/authorisation/me',
       'GET /api/authorisation/tenants/:tenantId/roles',
+      'GET /api/authorisation/visible-groups',
       'POST /api/authorisation/changes',
       'POST /api/authorisation/changes/:changeId/cancel',
       'POST /api/authorisation/changes/:changeId/decision',
@@ -240,6 +241,12 @@ describe.skipIf(!hasDatabase)('the /api/authorisation endpoints on PostgreSQL', 
       expect(await call('GET', `/api/authorisation${path}`, { as: 'out' }), path).toMatchObject({ status: 403, data: { code: 'forbidden' } })
     }
     expect(await call('GET', '/api/authorisation/groups/bad%20id/assignments', { as: 'mia' })).toMatchObject({ status: 400 })
+  })
+
+  it('lists the groups in which the signed-in subject holds a permission, parsing the query strictly', async () => {
+    expect(await call('GET', '/api/authorisation/visible-groups?permission=authorisation.grants:manage', { as: 'adam' })).toEqual({ status: 200, data: { permission: 'authorisation.grants:manage', groupIds: ['sales'] } })
+    expect(await call('GET', '/api/authorisation/visible-groups?permission=authorisation.grants:manage', { as: 'out' })).toEqual({ status: 200, data: { permission: 'authorisation.grants:manage', groupIds: [] } })
+    expect(await call('GET', '/api/authorisation/visible-groups', { as: 'adam' })).toMatchObject({ status: 400 })
   })
 
   it('lets requireAuthorisation answer only coarse errors', async () => {

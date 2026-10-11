@@ -139,6 +139,19 @@ returns integer language sql volatile as $$
 $$;
 `,
   },
+  {
+    // Contract 4, §15: just-in-time elevation. An eligible assignment
+    // confers nothing until activated, and only until `active_until`.
+    id: '0003_eligible_assignments',
+    sql: `
+alter table {{schema}}."role_assignment"
+  add column "eligible" boolean not null default false,
+  add column "active_until" timestamptz;
+alter table {{schema}}."pending_change" drop constraint "pending_change_type_check";
+alter table {{schema}}."pending_change" add constraint "pending_change_type_check" check ("type" in ('role.assign', 'role.unassign', 'grant.create', 'grant.revoke', 'role.define', 'role.delete',
+  'group.change-default-roles', 'group.change-review-interval', 'assignment.confirm', 'role.activate'));
+`,
+  },
 ]
 
 const SCHEMA_PATTERN = /^[a-z_][a-z0-9_]{0,62}$/

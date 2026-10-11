@@ -51,6 +51,8 @@ interface AssignmentRow {
   assigned_by: string | null
   confirmed_at: Date | null
   confirmed_by: string | null
+  eligible: boolean
+  active_until: Date | null
 }
 
 interface GrantRow {
@@ -66,11 +68,19 @@ interface GrantRow {
   created_at: Date
 }
 
-const ASSIGNMENT_COLUMNS = 'principal_id, group_id, role_id, scope, expires_at, created_at, assigned_by, confirmed_at, confirmed_by'
+const ASSIGNMENT_COLUMNS = 'principal_id, group_id, role_id, scope, expires_at, created_at, assigned_by, confirmed_at, confirmed_by, eligible, active_until'
 const GRANT_COLUMNS = 'grant_id, resource_type, resource_id, owning_group_id, subject_kind, subject_id, permissions, expires_at, granted_by, created_at'
 
 const toAssignment = (row: AssignmentRow): AuthorisationRoleAssignment =>
-  ({ principalId: row.principal_id, groupId: row.group_id, roleId: row.role_id, scope: row.scope, expiresAt: iso(row.expires_at) })
+  ({
+    principalId: row.principal_id,
+    groupId: row.group_id,
+    roleId: row.role_id,
+    scope: row.scope,
+    expiresAt: iso(row.expires_at),
+    // Only an eligible assignment carries its activation, so standing ones keep their shape.
+    ...(row.eligible ? { eligible: true, activeUntil: iso(row.active_until) } : {}),
+  })
 
 const toAssignmentView = (row: AssignmentRow): AuthorisationAssignmentView => ({
   ...toAssignment(row),
@@ -187,6 +197,15 @@ export function createStore(db: Queryable, schema: string) {
       return rows[0] ? toAssignmentView(rows[0]) : null
     },
 
+    /** Activates an eligible assignment until `activeUntil`. False when it is not (or no longer) eligible. */
+    async activate(key: { principalId: string, groupId: string, roleId: string }, activeUntil: Date): Promise<boolean> {
+      const { rows } = await query(
+        `update ${s}."role_assignment" set active_until = $4 where principal_id = $1 and group_id = $2 and role_id = $3 and eligible returning 1`,
+        [key.principalId, key.groupId, key.roleId, activeUntil.toISOString()],
+      )
+      return rows.length > 0
+    },
+
     /** Groups in which the role is assigned to anyone. */
     async groupsAssigning(roleId: string): Promise<string[]> {
       const { rows } = await query<{ group_id: string }>(`select distinct group_id from ${s}."role_assignment" where role_id = $1 order by group_id`, [roleId])
@@ -200,12 +219,14 @@ export function createStore(db: Queryable, schema: string) {
      */
     async assign(assignment: AuthorisationRoleAssignment, assignedBy: string | null, at: Date): Promise<boolean> {
       const { rows } = await query<{ changed: boolean }>(
-        `insert into ${s}."role_assignment" (principal_id, group_id, role_id, scope, assigned_by, created_at, expires_at) values ($1, $2, $3, $4, $5, $6, $7)
+        `insert into ${s}."role_assignment" (principal_id, group_id, role_id, scope, assigned_by, created_at, expires_at, eligible) values ($1, $2, $3, $4, $5, $6, $7, $8)
          on conflict (principal_id, group_id, role_id) do update set scope = excluded.scope, assigned_by = excluded.assigned_by,
-           expires_at = excluded.expires_at, created_at = excluded.created_at, confirmed_at = null, confirmed_by = null, overdue_announced_at = null
+           expires_at = excluded.expires_at, created_at = excluded.created_at, confirmed_at = null, confirmed_by = null, overdue_announced_at = null,
+           eligible = excluded.eligible, active_until = null
          where ${s}."role_assignment".scope <> excluded.scope or ${s}."role_assignment".expires_at is distinct from excluded.expires_at
+           or ${s}."role_assignment".eligible <> excluded.eligible
          returning true as changed`,
-        [assignment.principalId, assignment.groupId, assignment.roleId, assignment.scope, assignedBy, at.toISOString(), assignment.expiresAt],
+        [assignment.principalId, assignment.groupId, assignment.roleId, assignment.scope, assignedBy, at.toISOString(), assignment.expiresAt, assignment.eligible === true],
       )
       return rows.length > 0
     },

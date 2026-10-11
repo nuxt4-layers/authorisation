@@ -78,7 +78,9 @@ describe('approval rules', () => {
     expect(isSelfGrant({ type: 'assignment.confirm', requesterId: 'a', beneficiaryId: 'a', inRequestersPersonalGroup: false })).toBe(true)
     expect(isSelfGrant({ type: 'grant.create', requesterId: 'a', beneficiaryId: 'a', inRequestersPersonalGroup: true })).toBe(false)
     expect(isSelfGrant({ type: 'role.unassign', requesterId: 'a', beneficiaryId: 'a', inRequestersPersonalGroup: false })).toBe(false)
-    expect(Object.entries(AUTHORISATION_CHANGES).filter(([, c]) => c.confers).map(([type]) => type).sort()).toEqual(['assignment.confirm', 'grant.create', 'role.assign'])
+    expect(Object.entries(AUTHORISATION_CHANGES).filter(([, c]) => c.confers).map(([type]) => type).sort()).toEqual(['assignment.confirm', 'grant.create', 'role.activate', 'role.assign'])
+    // Activating one's own eligible assignment is no self-grant: it was granted, with approval, when made eligible.
+    expect(isSelfGrant({ type: 'role.activate', requesterId: 'a', beneficiaryId: 'a', inRequestersPersonalGroup: false })).toBe(false)
   })
 
   it('refuses the requester, the beneficiary, someone the requester controls, a stale digest and a weak session', () => {
@@ -109,7 +111,9 @@ describe('change requests and pending changes', () => {
     expect(changeRequestSchema.safeParse({ type: 'grant.create', target: { grant: { resource: { type: 'orders', id: 'o1' }, subject: { kind: 'principal', principalId: 'p' }, permissions: ['orders:view'], expiresAt: null } }, justification }).success).toBe(false)
     expect(changeRequestSchema.safeParse({ type: 'group.change-review-interval', target: { groupId: 'g', intervalDays: 0 }, justification }).success).toBe(false)
     expect(changeRequestSchema.safeParse({ type: 'superuser.grant', target: {}, justification }).success).toBe(false)
-    expect(AUTHORISATION_CHANGE_TYPES).toHaveLength(9)
+    expect(changeRequestSchema.safeParse({ type: 'role.activate', target: { principalId: 'p', groupId: 'g', roleId: 'member', minutes: 60 }, justification }).success).toBe(true)
+    expect(changeRequestSchema.safeParse({ type: 'role.activate', target: { principalId: 'p', groupId: 'g', roleId: 'member', minutes: 4 }, justification }).success).toBe(false)
+    expect(AUTHORISATION_CHANGE_TYPES).toHaveLength(10)
   })
 
   it('refuses a pending change whose target does not match its type', () => {

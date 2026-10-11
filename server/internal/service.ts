@@ -98,7 +98,7 @@ const grantEventData = (grant: StoredGrant, changeId: string | null) => ({
 })
 
 const assignmentEventData = (a: AuthorisationRoleAssignment, changeId: string | null) =>
-  ({ principalId: a.principalId, groupId: a.groupId, roleId: a.roleId, scope: a.scope, expiresAt: a.expiresAt, changeId })
+  ({ principalId: a.principalId, groupId: a.groupId, roleId: a.roleId, scope: a.scope, expiresAt: a.expiresAt, ...(a.eligible ? { eligible: true as const } : {}), changeId })
 
 /** The writes a change makes, inside a transaction, with its events. Used by the server functions and by applied changes. */
 export function createWriter(client: Queryable, schemaName: string, quotedSchema: string, context: { actorPrincipalId: string | null, correlationId: string, at: Date, changeId: string | null }) {

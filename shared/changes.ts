@@ -11,7 +11,7 @@ import {
 } from './identifiers'
 import { AUTHORISATION_RISK_LEVELS, higherRisk, permissionPatternMatches } from './permissions'
 import type { AuthorisationAdministrationPermission, AuthorisationPermissionCatalogue, AuthorisationRiskLevel } from './permissions'
-import { ROLE_ASSIGNMENT_SCOPES, roleDefinitionSchema } from './roles'
+import { AUTHORISATION_ACTIVATION_MAX_MINUTES, ROLE_ASSIGNMENT_SCOPES, roleDefinitionSchema } from './roles'
 import type { AuthorisationRolePermission } from './roles'
 import type { AuthorisationAssuranceRequirement } from './subject'
 
@@ -49,6 +49,12 @@ export const AUTHORISATION_CHANGES = Object.freeze({
   'group.change-default-roles': { permission: 'authorisation.group-access:manage', confers: false },
   'group.change-review-interval': { permission: 'authorisation.group-access:manage', confers: false },
   'assignment.confirm': { permission: 'authorisation.role-assignments:manage', confers: true },
+  /**
+   * Just-in-time elevation: the holder of an eligible assignment activates
+   * it for a bounded time. Its permission is the approvers'; the requester
+   * needs only the eligible assignment, which others already approved.
+   */
+  'role.activate': { permission: 'authorisation.role-assignments:manage', confers: true },
 } as const satisfies Record<string, { permission: AuthorisationAdministrationPermission, confers: boolean }>)
 
 export type AuthorisationChangeType = keyof typeof AUTHORISATION_CHANGES
@@ -100,7 +106,7 @@ const grantSchema = z.strictObject({
 /** The target of each change: what a requester submits, and what approvers see and approve (its digest). */
 export const AUTHORISATION_CHANGE_TARGETS = {
   /** Gives `principalId` the role in `groupId`; optionally to its descendants (always `critical`) and until `expiresAt`. */
-  'role.assign': z.strictObject({ principalId: id, groupId: id, roleId, scope: z.enum(ROLE_ASSIGNMENT_SCOPES).optional(), expiresAt: instantSchema.nullable().optional() }),
+  'role.assign': z.strictObject({ principalId: id, groupId: id, roleId, scope: z.enum(ROLE_ASSIGNMENT_SCOPES).optional(), expiresAt: instantSchema.nullable().optional(), eligible: z.boolean().optional() }),
   'role.unassign': z.strictObject({ principalId: id, groupId: id, roleId }),
   /** Shares a resource of `owningGroupId` with a principal or a group. */
   'grant.create': z.strictObject({ grant: grantSchema }),
@@ -113,6 +119,8 @@ export const AUTHORISATION_CHANGE_TARGETS = {
   'group.change-review-interval': z.strictObject({ groupId: id, intervalDays: z.number().int().min(REVIEW_INTERVAL_DAYS.min).max(REVIEW_INTERVAL_DAYS.max).nullable() }),
   /** Records that the assignment is still needed (an access review). */
   'assignment.confirm': z.strictObject({ principalId: id, groupId: id, roleId }),
+  /** Activates the requester's own eligible assignment for `minutes` (5 to `AUTHORISATION_ACTIVATION_MAX_MINUTES`). */
+  'role.activate': z.strictObject({ principalId: id, groupId: id, roleId, minutes: z.number().int().min(5).max(AUTHORISATION_ACTIVATION_MAX_MINUTES) }),
 } as const satisfies Record<AuthorisationChangeType, z.ZodType>
 
 export type AuthorisationChangeTarget<T extends AuthorisationChangeType = AuthorisationChangeType> = z.infer<typeof AUTHORISATION_CHANGE_TARGETS[T]>
@@ -337,6 +345,8 @@ export type AuthorisationApprovalRefusal = typeof APPROVAL_REFUSALS[number]
 
 /** Whether a change confers on its requester outside their personal group (rule 1). */
 export function isSelfGrant(input: { type: AuthorisationChangeType, requesterId: string, beneficiaryId: string | null, inRequestersPersonalGroup: boolean }): boolean {
+  // Activating one's own eligible assignment is not a self-grant: others approved the eligibility, and from `high` the activation needs its own approver.
+  if (input.type === 'role.activate') return false
   return AUTHORISATION_CHANGES[input.type].confers && input.beneficiaryId === input.requesterId && !input.inRequestersPersonalGroup
 }
 

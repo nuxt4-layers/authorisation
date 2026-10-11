@@ -88,7 +88,18 @@ export interface AuthorisationRoleAssignment {
    * it.
    */
   expiresAt: string | null
+  /**
+   * Just-in-time elevation (contract §15): an eligible assignment confers
+   * nothing until its holder activates it, with approval, for a bounded
+   * time. Absent or false: a standing assignment.
+   */
+  eligible?: boolean
+  /** ISO 8601 end of the current activation of an eligible assignment, or null. */
+  activeUntil?: string | null
 }
+
+/** The longest one activation of an eligible assignment may last, in minutes. */
+export const AUTHORISATION_ACTIVATION_MAX_MINUTES = 480
 
 export type AuthorisationGrantSubject =
   | { kind: 'principal', principalId: string }

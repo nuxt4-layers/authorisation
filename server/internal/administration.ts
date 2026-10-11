@@ -13,6 +13,7 @@ import type {
   AuthorisationRoleDocument,
   AuthorisationRoleView,
   AuthorisationSelfView,
+  AuthorisationVisibleGroups,
   AuthorisationSubject,
   AuthorisationTenantExport,
   AuthorisationTenantRoles,
@@ -28,6 +29,7 @@ import {
   roleDocumentSchema,
 } from '../../contracts'
 import type { AuthorisationChanges } from './changes'
+import { groupResource } from './changes'
 import type { Database } from './database'
 import { digestOf } from './digest'
 import { enqueue } from './outbox'
@@ -58,6 +60,7 @@ export interface AdministrationDependencies {
 
 const subjectSchema = z.object({
   principalId: identifierSchema,
+  kind: z.enum(['person', 'service']).optional(),
   authenticatedAt: instantSchema,
   assurance: z.object({ level: z.enum(['aal1', 'aal2']), phishingResistant: z.boolean() }),
 })
@@ -72,6 +75,9 @@ function parse<T>(run: () => T): T {
 }
 
 const DAY = 86_400_000
+
+/** The most candidate groups one visible-groups query decides. */
+const VISIBLE_GROUPS_MAX = 1000
 
 export function createAdministration({ db, schemaName, service, changes, directory, now, policy, legalHolds = () => null }: AdministrationDependencies) {
   const store = createStore(db, schemaName)
@@ -204,6 +210,37 @@ export function createAdministration({ db, schemaName, service, changes, directo
       const custom = (await io('store', () => store.customRoles([tenantId]))).get(tenantId) ?? new Map()
       const builtIn = await Promise.all(BUILT_IN_ROLE_IDS.map(async id => roleView((await changes.findRole(db, tenantId, id))!, true)))
       return { tenantId, roles: [...builtIn, ...[...custom.values()].sort((a, b) => (a.id < b.id ? -1 : 1)).map(role => roleView(role, false))] }
+    },
+
+    /**
+     * The groups in which the subject holds `permission` now (ADR-0006's
+     * visible scopes), for listing and search pages: each candidate group
+     * (the subject's memberships in effect, their personal group and the
+     * groups of their own assignments) decided as `authorise` decides it,
+     * for a resource the group owns with no attributes. Groups reached only
+     * through a `group-and-descendants` assignment's descendants are not
+     * listed, since Authorisation cannot enumerate a group's children;
+     * `authorise` still answers for each. Deny by default: an unknown
+     * permission lists nothing.
+     */
+    async visibleGroups(input: { subject: AuthorisationSubject, permission: string }): Promise<AuthorisationVisibleGroups> {
+      const subject = subjectOf(input.subject)
+      const permission = parse(() => z.string().min(3).max(128).regex(/^[^:]+:[^:]+$/).parse(input.permission))
+      const at = now()
+      const actor = await io('directory', () => directory.resolveActor(subject.principalId, { consistency: 'strong' }))
+      const candidates = new Set<string>()
+      if (actor?.principalId === subject.principalId) {
+        for (const m of actor.memberships) if (m.status === 'active' || m.status === 'paused') candidates.add(m.group.groupId)
+        if (actor.personalGroup) candidates.add(actor.personalGroup.groupId)
+      }
+      for (const a of await io('store', () => store.assignmentsOf(subject.principalId))) {
+        if (a.expiresAt === null || Date.parse(a.expiresAt) > at.getTime()) candidates.add(a.groupId)
+      }
+      const groupIds: string[] = []
+      for (const groupId of [...candidates].sort().slice(0, VISIBLE_GROUPS_MAX)) {
+        if ((await service.decide({ subject, permission, resource: groupResource(permission, groupId) })).allowed) groupIds.push(groupId)
+      }
+      return { permission, groupIds }
     },
 
     /** The signed-in principal's own live assignments: hints only. */
