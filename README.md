@@ -13,7 +13,7 @@
 
 A Nuxt 4 foundation layer that decides whether a signed-in principal may perform an action on a resource. It is governed by [`nuxt4-layers/platform-architecture`](https://github.com/nuxt4-layers/platform-architecture) (Identity and Authorization Architecture, ADR-0001, ADR-0002).
 
-**Status:** contract version 4. The contract, composition ports, decision engine, storage and server functions are in place, with view-only access for paused members, and access administration: changes with approvals, default roles, time-limited assignments, access reviews, role documents, a transactional outbox, endpoints and default pages (see [docs/roadmap.md](docs/roadmap.md)).
+**Status:** 1.0.0. Contract version 4 is frozen for 1.x; see [CHANGELOG.md](CHANGELOG.md) and the [roadmap](docs/roadmap.md).
 
 ## What it does
 

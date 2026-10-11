@@ -221,7 +221,7 @@ A directory or database failure refuses the request (`unavailable`). Decisions t
 
 ## 11. Versioning
 
-This is contract version 4, provided by package 0.4. Before 1.0, breaking changes are listed here and in the release notes.
+This is contract version 4, provided by package 1.0, and frozen for 1.x. From 1.0 the package follows [semantic versioning](https://semver.org/): a change that breaks the contract (a removed or narrowed type, function, endpoint, event or port, or a stricter rule a host must act on) needs a new contract version and a major release; an addition is a minor release; a fix is a patch. Each release is listed in `CHANGELOG.md`.
 
 | Version 1 | Version 2 |
 |---|---|
