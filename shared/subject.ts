@@ -18,6 +18,12 @@ export interface AuthorisationSubjectAssurance {
 export interface AuthorisationSubject {
   /** Stable, opaque principal identifier issued by Authentication. */
   principalId: string
+  /**
+   * `service` for a service identity's bearer token, `person` for a
+   * session. Absent from older Authentication releases, which authenticate
+   * people only.
+   */
+  kind?: 'person' | 'service'
   /** ISO 8601 timestamp of the most recent primary or step-up authentication. */
   authenticatedAt: string
   assurance: AuthorisationSubjectAssurance

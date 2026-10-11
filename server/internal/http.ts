@@ -70,6 +70,7 @@ export function correlationOf(event: H3Event): string {
 
 const subjectSchema = z.object({
   principalId: identifierSchema,
+  kind: z.enum(['person', 'service']).optional(),
   authenticatedAt: instantSchema,
   assurance: z.object({ level: z.enum(['aal1', 'aal2']), phishingResistant: z.boolean() }),
 })
@@ -87,7 +88,8 @@ export async function requireSubject(event: H3Event): Promise<AuthorisationSubje
   if (subject == null) throw new AuthorisationFailure('unauthenticated')
   const parsed = subjectSchema.safeParse(subject)
   if (!parsed.success) throw new AuthorisationFailure('unavailable', 'subject resolver returned a malformed subject')
-  return { principalId: parsed.data.principalId, authenticatedAt: parsed.data.authenticatedAt, assurance: parsed.data.assurance }
+  const { principalId, kind, authenticatedAt, assurance } = parsed.data
+  return { principalId, ...(kind ? { kind } : {}), authenticatedAt, assurance }
 }
 
 /** A route parameter that must be an opaque identifier. */

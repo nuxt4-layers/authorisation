@@ -191,6 +191,9 @@ export function createService({ db, schemaName, directory, catalogue, policy, em
     ({ principalId, authenticatedAt: now().toISOString(), assurance: { level: 'aal2', phishingResistant: true } })
 
   async function qualifies(principalId: string, permission: string, resource: AuthorisationResource): Promise<boolean> {
+    // A service identity never approves (iam-integration's service identities process), so it never counts as an approver.
+    const actor = await io('directory', () => directory.resolveActor(principalId, { consistency: 'strong' }))
+    if (actor?.kind === 'service') return false
     const decision = await decide({ subject: fullAssurance(principalId), permission, resource }, { strong: true })
     return decision.allowed
   }
