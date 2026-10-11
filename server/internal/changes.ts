@@ -84,6 +84,7 @@ export interface ChangesDependencies {
 
 const subjectSchema = z.object({
   principalId: identifierSchema,
+  kind: z.enum(['person', 'service']).optional(),
   authenticatedAt: instantSchema,
   assurance: z.object({ level: z.enum(['aal1', 'aal2']), phishingResistant: z.boolean() }),
 })
@@ -372,6 +373,18 @@ export function createChanges(deps: ChangesDependencies) {
     }
   }
 
+  /**
+   * Refuses a service identity (iam-integration's service identities
+   * process): it never requests or decides a change. Read from the subject
+   * Authentication gives and, at `strong` consistency, from Identity's own
+   * record, so neither alone can let one through.
+   */
+  async function refuseService(subject: AuthorisationSubject): Promise<void> {
+    if (subject.kind === 'service') throw new AuthorisationFailure('forbidden', 'service-identity')
+    const actor = await io('directory', () => directory.resolveActor(subject.principalId, { consistency: 'strong' }))
+    if (actor?.kind === 'service') throw new AuthorisationFailure('forbidden', 'service-identity')
+  }
+
   async function authoriseOn(subject: AuthorisationSubject, permission: string, groupId: string): Promise<void> {
     const decision = await service.decide({ subject, permission, resource: groupResource(permission, groupId) }, { strong: true })
     if (decision.allowed) return
@@ -525,6 +538,7 @@ export function createChanges(deps: ChangesDependencies) {
       const subject = parse(() => subjectSchema.parse(input.subject)) as AuthorisationSubject
       const correlationId = parse(() => correlationIdSchema.parse(input.correlationId))
       const request = parse(() => changeRequestSchema.parse(input.request)) as AuthorisationChangeRequest
+      await refuseService(subject)
       const located = await locate(request, subject)
       const { group } = located
       const permission = AUTHORISATION_CHANGES[request.type].permission
@@ -615,6 +629,7 @@ export function createChanges(deps: ChangesDependencies) {
       const changeId = parse(() => uuidSchema.parse(input.changeId))
       const digest = parse(() => sha256DigestSchema.parse(input.changeDigest))
       if (input.decision !== 'approve' && input.decision !== 'reject') throw new AuthorisationFailure('validation-failed')
+      await refuseService(subject)
       const change = await load(changeId)
       if (!change) throw new AuthorisationFailure('forbidden')
       const involved = change.requesterId === subject.principalId || change.beneficiaryId === subject.principalId

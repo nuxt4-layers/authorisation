@@ -74,11 +74,12 @@ export type {
   AuthorisationGroupLineage,
   AuthorisationMembership,
   AuthorisationMembershipStatus,
+  AuthorisationPrincipalKind,
   AuthorisationPrincipalStatus,
   AuthorisationResource,
   AuthorisationResourceRef,
 } from '../shared/resources'
-export { AUTHORISATION_MEMBERSHIP_STATUSES, AUTHORISATION_PRINCIPAL_STATUSES } from '../shared/resources'
+export { AUTHORISATION_MEMBERSHIP_STATUSES, AUTHORISATION_PRINCIPAL_KINDS, AUTHORISATION_PRINCIPAL_STATUSES } from '../shared/resources'
 
 // ---------------------------------------------------------------------------
 // Roles, assignments, grants and conditions

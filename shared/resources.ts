@@ -93,11 +93,25 @@ export const AUTHORISATION_PRINCIPAL_STATUSES = ['active', 'paused', 'suspended'
 export type AuthorisationPrincipalStatus = typeof AUTHORISATION_PRINCIPAL_STATUSES[number]
 
 /**
+ * Whose principal it is (iam-integration's service identities process): a
+ * person, a service identity (software acting for a group) or a break-glass
+ * account. A service identity never requests or decides a change.
+ */
+export const AUTHORISATION_PRINCIPAL_KINDS = ['person', 'service', 'break-glass'] as const
+
+export type AuthorisationPrincipalKind = typeof AUTHORISATION_PRINCIPAL_KINDS[number]
+
+/**
  * The principal's group context, resolved by the host's directory adapter
  * for each decision.
  */
 export interface AuthorisationActorContext {
   principalId: string
+  /**
+   * Whose principal it is, from Identity. Absent from directories that
+   * predate service identities, which hold none: read as `person`.
+   */
+  kind?: AuthorisationPrincipalKind
   /** The principal's own standing (contract 3). Anything but a known status confers nothing. */
   status: AuthorisationPrincipalStatus
   /**

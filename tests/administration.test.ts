@@ -71,6 +71,8 @@ describe.skipIf(!hasDatabase)('access administration on PostgreSQL', () => {
   const required = new Map<string, AuthorisationRequiredApprovers>()
   const holds = new Map<string, string>()
   const controls = new Map<string, string[]>()
+  /** Service identities, as Identity's directory names them. */
+  const services = new Set<string>()
   let governanceFails = false
 
   const group = (groupId: string, parent: string | null, tenantId = 'tenant-a') => {
@@ -88,6 +90,7 @@ describe.skipIf(!hasDatabase)('access administration on PostgreSQL', () => {
       if (!list && !personal) return null
       return {
         principalId,
+        kind: services.has(principalId) ? 'service' : 'person',
         status: 'active',
         personalGroup: personal ? groups.get(personal)! : null,
         memberships: (list ?? []).map(m => ({ group: groups.get(m.groupId)!, status: m.status })),
@@ -392,6 +395,42 @@ describe.skipIf(!hasDatabase)('access administration on PostgreSQL', () => {
       provideAuthorisationClock({ now: () => at })
       await expect(request(subject('adam'), 'role.assign', { principalId: 'gus', groupId: 'sales', roleId: 'member' })).rejects.toMatchObject({ name: 'AuthorisationCompositionError' })
       provideAuthorisationGovernance(governance)
+    })
+  })
+
+  describe('service identities (iam-integration\'s service identities process)', () => {
+    /** A service token's session: aal2, never phishing resistant. */
+    const service = (principalId: string, kind?: 'service'): AuthorisationSubject =>
+      ({ ...subject(principalId, { phishingResistant: false }), ...(kind ? { kind } : {}) })
+
+    it('gives a service identity roles through its memberships like anyone, but never lets it request a change', async () => {
+      services.add('bot-sales')
+      member('bot-sales', 'sales')
+      expect(await request(subject('adam'), 'role.assign', { principalId: 'bot-sales', groupId: 'sales', roleId: 'member' })).toMatchObject({ state: 'applied', beneficiaryId: 'bot-sales' })
+      expect((await authorise({ subject: service('bot-sales', 'service'), permission: 'orders:create', resource: { type: 'orders', id: 'order-1', owningGroupId: 'sales' } })).allowed).toBe(true)
+      await assignAuthorisationRole({ principalId: 'bot-sales', groupId: 'sales', roleId: 'administrator', actorPrincipalId: 'sam' })
+      // Refused as a service by Authentication's subject, and by Identity's record when the subject says nothing.
+      for (const as of [service('bot-sales', 'service'), service('bot-sales')]) {
+        await expect(request(as, 'role.assign', { principalId: 'gus', groupId: 'sales', roleId: 'viewer' })).rejects.toMatchObject({ code: 'forbidden' })
+      }
+      expect(await relayed()).not.toContainEqual(expect.objectContaining({ type: 'authorisation.change-requested', actorPrincipalId: 'bot-sales' }))
+    })
+
+    it('never counts a service identity as an approver, nor lets it decide', async () => {
+      // ops, under sales: one person and one service identity administer it.
+      group('ops', 'sales')
+      member('oscar', 'ops')
+      await assignAuthorisationRole({ principalId: 'oscar', groupId: 'ops', roleId: 'administrator', actorPrincipalId: 'sam' })
+      services.add('bot-ops')
+      member('bot-ops', 'ops')
+      await assignAuthorisationRole({ principalId: 'bot-ops', groupId: 'ops', roleId: 'administrator', actorPrincipalId: 'sam' })
+      member('olga', 'ops')
+      const change = await request(subject('oscar'), 'role.assign', { principalId: 'olga', groupId: 'ops', roleId: 'administrator' })
+      // bot-ops holds the role but cannot approve: the next route is an owner of the parent group.
+      expect(change.route).toBe('parent-owner')
+      await expect(changes().decide({ subject: service('bot-ops', 'service'), changeId: change.changeId, changeDigest: change.changeDigest, decision: 'approve', correlationId: CORRELATION }))
+        .rejects.toMatchObject({ code: 'forbidden' })
+      expect(await approve(subject('sam'), change.changeId)).toMatchObject({ state: 'applied', approvals: [expect.objectContaining({ approverId: 'sam' })] })
     })
   })
 
