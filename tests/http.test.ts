@@ -19,6 +19,7 @@ import {
 } from '../server/utils/authorisation-composition'
 import { assignAuthorisationRole, migrateAuthorisationDatabase, requireAuthorisation } from '../server/utils/authorisation-server'
 import { createTestDatabase, hasDatabase, requireDatabaseInCi } from './support/database'
+import { toPosix } from './support/paths'
 
 requireDatabaseInCi()
 
@@ -29,7 +30,7 @@ function endpointFiles(directory: string = API): { file: string, method: string,
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name)
     if (entry.isDirectory()) return endpointFiles(path)
-    const match = /^(.*)\.(get|post|patch|delete)\.ts$/.exec(relative(API, path))
+    const match = /^(.*)\.(get|post|patch|delete)\.ts$/.exec(toPosix(relative(API, path)))
     if (!match) throw new Error(`Unexpected file in server/api/authorisation: ${entry.name}`)
     const route = `/api/authorisation/${match[1]!}`.replace(/\[(\w+)\]/g, ':$1').replace(/\/index$/, '')
     return [{ file: path, method: match[2]!, route }]
