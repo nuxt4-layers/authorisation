@@ -31,4 +31,5 @@ Governed by `nuxt4-layers/platform-architecture`; persistence follows ADR-0002. 
 - No names, email addresses, resource attributes or other personal data in events or logs.
 - Defaults are secure; loosening policy requires a documented risk treatment.
 - Keep `docs/contracts.md`, `docs/threat-model.md` (control register) and `docs/roadmap.md` in step with code.
+- Platform-agnostic: the layer and its tests run alike on Windows, macOS and Linux. Tests that compare file paths with import specifiers or routes pass them through `toPosix` (`tests/support/paths.ts`) first: Node's path functions answer with `\` on Windows.
 - Package manager: pnpm. Commit `pnpm-lock.yaml`.
