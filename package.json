@@ -52,12 +52,12 @@
     "@types/node": "^24.13.6",
     "@types/pg": "^8.23.1",
     "h3": "^1.15.11",
-    "nuxt": "^4.5.2",
+    "nuxt": "^4.6.1",
     "pg": "^8.23.1",
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3",
-    "vitest": "^5.0.3",
-    "vue-tsc": "^3.3.11"
+    "vitest": "^5.0.4",
+    "vue-tsc": "^3.3.13"
   },
   "packageManager": "pnpm@10.28.0",
   "engines": {
